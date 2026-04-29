@@ -156,7 +156,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | B2-MD | Market data adapter — `yahoo-finance2` 래퍼 + REST 라우트 + in-memory 캐시 (30~60s) | `server/providers/yahoo.ts`, `server/routes/{market,security,portfolio}.ts`, `app/src/data/*.ts` 본문 swap | backend-api-data-engineer | 🟡 | by B2-SRV. ticker→CIK 매핑은 SEC `company_tickers.json` 1회 캐시 |
 | B2-FRED | FRED 어댑터 (CPI 등 매크로) — 선택. API key 미설정 시 mock 유지 | `server/providers/fred.ts`, `server/routes/macro.ts` | backend-api-data-engineer | 🟡 | by B2-SRV. .env로 키 관리 |
 | B2-SEC | SEC EDGAR 어댑터 (공시 원문 메타데이터) | `server/providers/sec.ts`, `server/routes/security.ts` 확장 | backend-api-data-engineer | 🟡 | by B2-SRV. User-Agent 헤더 필수 |
-| B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 응답 캐시) | `server/routes/ai.ts` | backend-api-data-engineer + claude-api skill | 🟡 | by B2-SRV. ANTHROPIC_API_KEY env, 모델 `claude-opus-4-7` 기본, prompt caching 필수 |
+| B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 응답 캐시) | `server/routes/ai.ts` | backend-api-data-engineer + claude-api skill | ✅ | Model: `claude-opus-4-7`. Caching: `cache_control:{type:'ephemeral'}` on system-prompt content block for all 4 endpoints. SSE: GET /signals (AISignal[]) + GET /insights (AIInsight[]) fan-out parsed arrays as individual events. POST /verdict + /hedge return full JSON. Fallback: frontend probes with HEAD; 503→mock generators used inline. Provider: `server/src/providers/anthropic.ts` (lazy singleton). App build: 215 modules / 371 KB ✓. |
 | B2-TW | Tweaks 확장 (timezone, locale, currency, 컬럼설정 영속화) | `app/src/lib/tweaks.tsx` | frontend-ui-integrator | ✅ | localStorage 영속화 (`intelistock.tweaks.v1`), timezone/locale/currency selects, reset 버튼, locale → `<html lang>` 반영. 기존 useTweaks consumers 호환. |
 
 ### 배치 B3 — AI 의존 섹션 (B2-AI 완료 후)
