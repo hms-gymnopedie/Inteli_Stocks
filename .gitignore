@@ -1,0 +1,21 @@
+# Design handoff archive (kept locally, not version controlled)
+design.tar.gz
+design_archive/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Logs / env
+*.log
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
