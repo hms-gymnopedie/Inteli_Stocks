@@ -60,7 +60,7 @@ export function Detail() {
           }}
         >
           <AIInvestmentGuide />
-          <AnalystTargets />
+          <AnalystTargets symbol={SYMBOL} />
           <Peers />
         </aside>
       </div>
