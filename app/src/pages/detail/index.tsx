@@ -1,9 +1,11 @@
+import { useState } from 'react';
+
 import { AIInvestmentGuide } from './AIInvestmentGuide';
 import { AnalystTargets } from './AnalystTargets';
 import { DisclosuresFeed } from './DisclosuresFeed';
 import { Header } from './Header';
 import { MACDPanel } from './MACDPanel';
-import { MainChart } from './MainChart';
+import { MainChart, type StudyKey } from './MainChart';
 import { Peers } from './Peers';
 import { RSIPanel } from './RSIPanel';
 import { ValuationGrid } from './ValuationGrid';
@@ -13,7 +15,24 @@ import { ValuationGrid } from './ValuationGrid';
 // the same constant so swapping symbols is a one-line edit.
 const SYMBOL = 'NVDA';
 
+const ALL_STUDIES: StudyKey[] = ['RSI', 'MACD', 'VOL'];
+
 export function Detail() {
+  // Studies pills are owned here so RSI/MACD panel visibility can follow the
+  // same toggle. VOL is consumed locally inside MainChart.
+  const [studies, setStudies] = useState<Set<StudyKey>>(
+    () => new Set(ALL_STUDIES),
+  );
+
+  const toggleStudy = (key: StudyKey) => {
+    setStudies((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   return (
     <div className="app-frame" style={{ fontSize: 12 }}>
       <Header symbol={SYMBOL} />
@@ -35,14 +54,25 @@ export function Detail() {
             gap: 10,
           }}
         >
-          <MainChart />
+          <MainChart
+            symbol={SYMBOL}
+            studies={studies}
+            onToggleStudy={toggleStudy}
+          />
 
-          <div
-            style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}
-          >
-            <RSIPanel />
-            <MACDPanel />
-          </div>
+          {(studies.has('RSI') || studies.has('MACD')) && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  studies.has('RSI') && studies.has('MACD') ? '1fr 1fr' : '1fr',
+                gap: 10,
+              }}
+            >
+              {studies.has('RSI') && <RSIPanel />}
+              {studies.has('MACD') && <MACDPanel />}
+            </div>
+          )}
 
           <ValuationGrid symbol={SYMBOL} />
 
