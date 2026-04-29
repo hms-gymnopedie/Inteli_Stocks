@@ -44,7 +44,7 @@ export function Detail() {
             <MACDPanel />
           </div>
 
-          <ValuationGrid />
+          <ValuationGrid symbol={SYMBOL} />
 
           <DisclosuresFeed />
         </main>

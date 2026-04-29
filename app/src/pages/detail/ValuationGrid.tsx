@@ -1,21 +1,34 @@
-const VALUATION: [string, string, string?][] = [
-  ['MKT CAP', '$2.31T'],
-  ['P/E', '74.1', 'sector 28.4'],
-  ['P/S', '36.2'],
-  ['REV YoY', '+265%', 'up'],
-  ['NET MARGIN', '54.2%'],
-  ['DIV YIELD', '0.02%'],
-  ['52W RANGE', '$280 — $974'],
-  ['BETA', '1.74'],
-  ['SHORT %', '1.20%'],
-  ['EPS (TTM)', '$11.93'],
-  ['FCF', '$26.9B'],
-  ['DEBT/EQ', '0.36'],
-];
+import { getFundamentals } from '../../data/security';
+import type { Fundamental } from '../../data/types';
+import { useAsync } from '../../lib/useAsync';
 
-export function ValuationGrid() {
+interface ValuationGridProps {
+  symbol: string;
+}
+
+const COLS = 6;
+const SKELETON_CELLS = 12;
+
+/**
+ * 6×2 grid of fundamental metrics (MKT CAP, P/E, P/S, etc).
+ *
+ * The `Fundamental` type has an optional `note?: string`. The convention from
+ * the original prototype is:
+ *   - `note === 'up'`  → tint the value green (positive change indicator)
+ *   - any other string → render the note as a small dimmed line under the value
+ *                        (e.g. "sector 28.4")
+ *   - undefined        → no extra line, no tint
+ * Always guard with `m.note ?? ''` / explicit `m.note !== undefined` checks —
+ * never index into `note` without a guard.
+ */
+export function ValuationGrid({ symbol }: ValuationGridProps) {
+  const { data, loading } = useAsync(() => getFundamentals(symbol), [symbol]);
+
+  const cells = data ?? [];
+  const dimmed = loading && !data ? { opacity: 0.4 } : undefined;
+
   return (
-    <div className="wf-panel" style={{ padding: 12 }}>
+    <div className="wf-panel" style={{ padding: 12 }} aria-busy={loading}>
       <div className="row between">
         <div className="wf-label">Valuation · Fundamentals</div>
         <div className="wf-mini muted-2">FY24 · TTM</div>
@@ -23,31 +36,59 @@ export function ValuationGrid() {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(6, 1fr)',
+          gridTemplateColumns: `repeat(${COLS}, 1fr)`,
           gap: 12,
           marginTop: 10,
+          ...dimmed,
         }}
       >
-        {VALUATION.map((m, i) => (
-          <div
-            key={m[0]}
-            style={{
-              borderTop: i >= 6 ? '1px solid var(--hairline)' : 0,
-              paddingTop: i >= 6 ? 10 : 0,
-            }}
-          >
-            <div className="wf-mini">{m[0]}</div>
-            <div
-              className={`wf-num ${m[2] === 'up' ? 'up' : ''}`}
-              style={{ fontSize: 16, marginTop: 2 }}
-            >
-              {m[1]}
-            </div>
-            {m[2] && m[2] !== 'up' && (
-              <div className="wf-mini muted-2">{m[2]}</div>
-            )}
-          </div>
-        ))}
+        {data
+          ? cells.map((m, i) => <Cell key={m.label} m={m} index={i} />)
+          : Array.from({ length: SKELETON_CELLS }).map((_, i) => (
+              <SkeletonCell key={i} index={i} />
+            ))}
+      </div>
+    </div>
+  );
+}
+
+function Cell({ m, index }: { m: Fundamental; index: number }) {
+  const isUp = m.note === 'up';
+  const note = m.note ?? '';
+  const showNoteText = note.length > 0 && note !== 'up';
+  return (
+    <div
+      style={{
+        borderTop: index >= COLS ? '1px solid var(--hairline)' : 0,
+        paddingTop: index >= COLS ? 10 : 0,
+      }}
+    >
+      <div className="wf-mini">{m.label}</div>
+      <div
+        className={`wf-num ${isUp ? 'up' : ''}`}
+        style={{ fontSize: 16, marginTop: 2 }}
+      >
+        {m.value}
+      </div>
+      {showNoteText && <div className="wf-mini muted-2">{note}</div>}
+    </div>
+  );
+}
+
+function SkeletonCell({ index }: { index: number }) {
+  return (
+    <div
+      style={{
+        borderTop: index >= COLS ? '1px solid var(--hairline)' : 0,
+        paddingTop: index >= COLS ? 10 : 0,
+      }}
+    >
+      <div className="wf-mini">———</div>
+      <div
+        className="wf-num"
+        style={{ fontSize: 16, marginTop: 2, color: 'var(--fg-4)' }}
+      >
+        —
       </div>
     </div>
   );
