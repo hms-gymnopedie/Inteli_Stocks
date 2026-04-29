@@ -56,12 +56,15 @@ export function IndicesStrip() {
             }
             style={{
               all: 'unset',
+              boxSizing: 'border-box',
               cursor: 'pointer',
               padding: '8px 10px',
               borderRight: !last ? '1px solid var(--hairline)' : 0,
               display: 'block',
+              width: '100%',
             }}
             title={`Open ${row.label} detail`}
+            aria-label={`${row.label} ${row.price} ${row.change}, open detail`}
           >
             <div className="wf-mini">{row.label}</div>
             <div
