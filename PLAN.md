@@ -32,7 +32,7 @@
 
 ### Task 0-A — 데이터 레이어 (타입 + mock)
 
-**Agent:** backend-api-data-engineer · **Status:** ⬜
+**Agent:** backend-api-data-engineer · **Status:** 🟡
 
 | Sub-ID | 산출물 | 내용 |
 |---|---|---|
@@ -47,7 +47,9 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 ### Task 0-B — 페이지 분해
 
-**Agent:** frontend-ui-integrator · **Status:** ⬜
+**Agent:** frontend-ui-integrator · **Status:** ✅
+
+> **Notes (2026-04-28):** 4 monolithic page files (1771 LOC) → 33 section files + 4 `index.tsx` shells (1984 LOC, +213 from per-file headers/imports). Visual output identical — wrapping grids and asides preserved in `index.tsx`, panels and content moved into named sections. Hardcoded data arrays kept inline pending 0-A. `npm run build` passes.
 
 한 파일에 몰린 섹션을 컴포넌트 파일로 분리 (B1 병렬 작업의 충돌 제거):
 

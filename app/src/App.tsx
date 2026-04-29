@@ -1,9 +1,9 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { TweaksPanel, TweaksProvider } from './lib/tweaks';
-import { Overview } from './pages/Overview';
-import { Portfolio } from './pages/Portfolio';
-import { GeoRisk } from './pages/GeoRisk';
-import { Detail } from './pages/Detail';
+import { Overview } from './pages/overview';
+import { Portfolio } from './pages/portfolio';
+import { GeoRisk } from './pages/geo';
+import { Detail } from './pages/detail';
 
 const NAV = [
   { to: '/overview', label: 'Overview' },
