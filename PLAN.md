@@ -32,16 +32,16 @@
 
 ### Task 0-A — 데이터 레이어 (타입 + mock)
 
-**Agent:** backend-api-data-engineer · **Status:** 🟡
+**Agent:** backend-api-data-engineer · **Status:** ✅
 
-| Sub-ID | 산출물 | 내용 |
-|---|---|---|
-| 0-A.1 | `app/src/data/types.ts` | 30+ 도메인 타입 (`Quote`, `Index`, `OHLC`, `MacroIndicator`, `SectorReturn`, `Constituent`, `FearGreed`, `CalendarEvent`, `Holding`, `AllocationSlice`, `EquityPoint`, `AIInsight`, `AISignal`, `AIVerdict`, `RiskHotspot`, `RiskMapEntry`, `RiskAlert`, `AffectedHolding`, `SecurityProfile`, `Fundamental`, `Filing`, `AnalystTarget`, `Peer`, `Earnings`, `Range`, `MacroKey` 등) |
-| 0-A.2 | `app/src/data/market.ts` | `getIndices()`, `getIntraday(sym,range)`, `getSPConstituents()`, `getSectorReturns(range)`, `getMacro(keys)`, `getCalendar(date)`, `getFearGreed()`, `getSessionVolume()`, `getSearch(q)` — 모두 mock Promise |
-| 0-A.3 | `app/src/data/portfolio.ts` | `getSummary()`, `getEquityCurve(range)`, `getAllocation(by)`, `getHoldings()`, `getWatchlist(region)`, `getTrades()`, `getRiskFactors()` |
-| 0-A.4 | `app/src/data/geo.ts` | `getRiskMap()`, `getGlobalIndex()`, `getHotspots()`, `getAffected(portfolioId)`, `streamAlerts()` (AsyncIterable) |
-| 0-A.5 | `app/src/data/security.ts` | `getProfile(symbol)`, `getOHLC(symbol,range)`, `getFundamentals(symbol)`, `getFilings(symbol)`, `getTargets(symbol)`, `getPeers(symbol)`, `getEarnings(symbol)`, `getIVSurface(symbol)` |
-| 0-A.6 | `app/src/data/ai.ts` | `streamSignals()`, `streamInsights(portfolioId)`, `proposeHedge(exposure)`, `getVerdict(symbol)` — 모두 AsyncIterable, mock 단계에선 setTimeout으로 toy stream |
+| Sub-ID | 산출물 | 내용 | Notes |
+|---|---|---|---|
+| 0-A.1 | `app/src/data/types.ts` | 30+ 도메인 타입 (`Quote`, `Index`, `OHLC`, `MacroIndicator`, `SectorReturn`, `Constituent`, `FearGreed`, `CalendarEvent`, `Holding`, `AllocationSlice`, `EquityPoint`, `AIInsight`, `AISignal`, `AIVerdict`, `RiskHotspot`, `RiskMapEntry`, `RiskAlert`, `AffectedHolding`, `SecurityProfile`, `Fundamental`, `Filing`, `AnalystTarget`, `Peer`, `Earnings`, `Range`, `MacroKey` 등) | ✅ 36 types, no `any`, strict TS; added `Direction`, `ImpactLevel`, `MapLayer`, `HedgeProposal`, `IVSurfacePoint`, `ConvictionAxis`, `FlowLine` as needed by fetchers |
+| 0-A.2 | `app/src/data/market.ts` | `getIndices()`, `getIntraday(sym,range)`, `getSPConstituents()`, `getSectorReturns(range)`, `getMacro(keys)`, `getCalendar(date)`, `getFearGreed()`, `getSessionVolume()`, `getSearch(q)` — 모두 mock Promise | ✅ Data verbatim from TICKER_STRIP, KR_WATCH, HeatGrid cells, SectorBars, Macro Monitor, calendar events in Overview.tsx |
+| 0-A.3 | `app/src/data/portfolio.ts` | `getSummary()`, `getEquityCurve(range)`, `getAllocation(by)`, `getHoldings()`, `getWatchlist(region)`, `getTrades()`, `getRiskFactors()` | ✅ HOLDINGS, HEADER_KPIS, allocation bars from Portfolio.tsx; `getWatchlist` kept here for portfolioId scoping, mirrors market version |
+| 0-A.4 | `app/src/data/geo.ts` | `getRiskMap()`, `getGlobalIndex()`, `getHotspots()`, `getAffected(portfolioId)`, `streamAlerts()` (AsyncIterable) | ✅ HOTSPOTS, AFFECTED, LAYERS, heat/pins/flows, alert text from GeoRisk.tsx; added `getLayers()` helper; streamAlerts finite cycle |
+| 0-A.5 | `app/src/data/security.ts` | `getProfile(symbol)`, `getOHLC(symbol,range)`, `getFundamentals(symbol)`, `getFilings(symbol)`, `getTargets(symbol)`, `getPeers(symbol)`, `getEarnings(symbol)`, `getIVSurface(symbol)` | ✅ VALUATION, FILINGS, PEERS, analyst targets, NVDA header from Detail.tsx; OHLC + IV surface are synthetic generators |
+| 0-A.6 | `app/src/data/ai.ts` | `streamSignals()`, `streamInsights(portfolioId)`, `proposeHedge(exposure)`, `getVerdict(symbol)` — 모두 AsyncIterable, mock 단계에선 setTimeout으로 toy stream | ✅ Signal/insight text from Overview/Portfolio.tsx; conviction axes from Detail.tsx; hedge proposal from GeoRisk.tsx; finite streams (yield-once-through) |
 
 Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portfolio/Geo/Detail tsx에 박힌 배열들)을 그대로 끌어올림.
 
