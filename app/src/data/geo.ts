@@ -20,42 +20,85 @@ function delay(): Promise<void> {
 
 // ─── Mock datasets ────────────────────────────────────────────────────────────
 
+// Heat map keyed by ISO 3166-1 alpha-3 (B2-MAP). Country picks below try to
+// preserve the previous continent-level pattern: APAC tension belt high,
+// Middle East elevated, Europe edge cases medium, Americas/Oceania low.
+//
+// Pins now carry both lat/lng (for the new TopoJSON map) AND legacy x/y
+// viewBox coordinates (for any caller that hasn't migrated yet). The new
+// WorldMap prefers lat/lng when present.
+//
+// Flows are expressed as [lng1, lat1, lng2, lat2] tuples — the new map
+// auto-detects geographic vs viewBox flow tuples (anything within ±180 is
+// treated as geographic). The previous viewBox-based tuples are preserved
+// in spirit (US <-> TW, KR <-> US, IR -> UA, NG -> UA) but use real geo
+// endpoints so flow lines stay pinned to the correct countries under the
+// equal-earth projection.
 const MOCK_RISK_MAP: RiskMapEntry = {
   heat: {
-    namerica:    'low',
-    europe:      'med',
-    africa:      'med',
-    asia:        'high',
-    india:       'med',
-    seasia:      'med',
-    samerica:    'low',
-    australia:   'low',
-    arabia:      'high',
-    korea:       'med',
-    japan:       'low',
-    uk:          'low',
-    indonesia:   'low',
-    camerica:    'low',
-    nz:          'low',
-    philippines: 'med',
-    greenland:   'low',
-    scand:       'low',
-    madagascar:  'low',
+    // High — active conflict / hot tension
+    UKR: 'high',
+    RUS: 'high',
+    ISR: 'high',
+    PSE: 'high',
+    TWN: 'high',
+    CHN: 'high',
+    SAU: 'high',
+    IRN: 'high',
+    // Medium — elevated risk
+    KOR: 'med',
+    PRK: 'med',
+    IND: 'med',
+    PAK: 'med',
+    EGY: 'med',
+    TUR: 'med',
+    LBN: 'med',
+    SYR: 'med',
+    IRQ: 'med',
+    YEM: 'med',
+    NGA: 'med',
+    PHL: 'med',
+    VNM: 'med',
+    USA: 'med',
+    DEU: 'med',
+    FRA: 'med',
+    // Low — quiet
+    JPN: 'low',
+    GBR: 'low',
+    CAN: 'low',
+    MEX: 'low',
+    BRA: 'low',
+    ARG: 'low',
+    AUS: 'low',
+    NZL: 'low',
+    IDN: 'low',
+    MYS: 'low',
+    THA: 'low',
+    ZAF: 'low',
+    GRL: 'low',
+    NOR: 'low',
+    SWE: 'low',
+    FIN: 'low',
+    ESP: 'low',
+    ITA: 'low',
+    POL: 'low',
+    MDG: 'low',
   },
   pins: [
-    { x: 490, y: 120, level: 'high', label: 'UA · WAR'       },
-    { x: 565, y: 200, level: 'high', label: 'IL · CONFLICT'  },
-    { x: 590, y: 215, level: 'med',  label: 'IR · SANCTIONS' },
-    { x: 790, y: 200, level: 'high', label: 'TW · TENSION'   },
-    { x: 815, y: 158, level: 'med',  label: 'KR · ELECTION'  },
-    { x: 220, y: 160, level: 'med',  label: 'US · TARIFFS'   },
-    { x: 480, y: 280, level: 'low',  label: 'NG · OIL'       },
+    { x: 490, y: 120, lng:  31,    lat: 49,    level: 'high', label: 'UA · WAR'       },
+    { x: 565, y: 200, lng:  35,    lat: 32,    level: 'high', label: 'IL · CONFLICT'  },
+    { x: 590, y: 215, lng:  53,    lat: 32,    level: 'med',  label: 'IR · SANCTIONS' },
+    { x: 790, y: 200, lng: 121,    lat: 23.7,  level: 'high', label: 'TW · TENSION'   },
+    { x: 815, y: 158, lng: 127,    lat: 37.5,  level: 'med',  label: 'KR · ELECTION'  },
+    { x: 220, y: 160, lng: -95,    lat: 38,    level: 'med',  label: 'US · TARIFFS'   },
+    { x: 480, y: 280, lng:   8,    lat:  9,    level: 'low',  label: 'NG · OIL'       },
   ],
   flows: [
-    [220, 160, 790, 200],
-    [815, 158, 220, 160],
-    [590, 215, 490, 120],
-    [480, 280, 490, 120],
+    // (lng, lat) → (lng, lat). US ↔ TW, KR → US, IR → UA, NG → UA.
+    [-95, 38, 121, 23.7],
+    [127, 37.5, -95, 38],
+    [ 53, 32,   31, 49  ],
+    [  8,  9,   31, 49  ],
   ],
 };
 
