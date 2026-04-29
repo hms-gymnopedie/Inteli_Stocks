@@ -61,7 +61,7 @@ export function Detail() {
         >
           <AIInvestmentGuide />
           <AnalystTargets symbol={SYMBOL} />
-          <Peers />
+          <Peers symbol={SYMBOL} />
         </aside>
       </div>
     </div>
