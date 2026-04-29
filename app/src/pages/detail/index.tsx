@@ -70,7 +70,7 @@ export function Detail() {
               }}
             >
               {studies.has('RSI') && <RSIPanel symbol={SYMBOL} />}
-              {studies.has('MACD') && <MACDPanel />}
+              {studies.has('MACD') && <MACDPanel symbol={SYMBOL} />}
             </div>
           )}
 
