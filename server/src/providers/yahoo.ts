@@ -68,18 +68,19 @@ export const MACRO_SYMBOLS: Record<string, string> = {
 type Range = '1D' | '1W' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | 'MAX';
 
 function rangeToPeriod1(range: Range): Date {
-  const now = new Date();
+  const ts = Date.now();
+  const d  = new Date(ts); // fresh copy each time — avoid mutation bugs
   switch (range) {
-    case '1D':  return new Date(now.getTime() - 1 * 24 * 3600_000);
-    case '1W':  return new Date(now.getTime() - 7 * 24 * 3600_000);
-    case '1M':  return new Date(now.setMonth(now.getMonth() - 1));
-    case '3M':  return new Date(now.setMonth(now.getMonth() - 3));
-    case '6M':  return new Date(now.setMonth(now.getMonth() - 6));
-    case '1Y':  return new Date(now.setFullYear(now.getFullYear() - 1));
-    case '5Y':  return new Date(now.setFullYear(now.getFullYear() - 5));
-    case 'YTD': return new Date(now.getFullYear(), 0, 1);
+    case '1D':  return new Date(ts - 1 * 24 * 3600_000);
+    case '1W':  return new Date(ts - 7 * 24 * 3600_000);
+    case '1M':  { const t = new Date(ts); t.setMonth(t.getMonth() - 1); return t; }
+    case '3M':  { const t = new Date(ts); t.setMonth(t.getMonth() - 3); return t; }
+    case '6M':  { const t = new Date(ts); t.setMonth(t.getMonth() - 6); return t; }
+    case '1Y':  { const t = new Date(ts); t.setFullYear(t.getFullYear() - 1); return t; }
+    case '5Y':  { const t = new Date(ts); t.setFullYear(t.getFullYear() - 5); return t; }
+    case 'YTD': return new Date(d.getFullYear(), 0, 1);
     case 'MAX': return new Date('2000-01-01');
-    default:    return new Date(now.setFullYear(now.getFullYear() - 1));
+    default:    { const t = new Date(ts); t.setFullYear(t.getFullYear() - 1); return t; }
   }
 }
 
