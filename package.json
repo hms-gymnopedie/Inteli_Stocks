@@ -1,0 +1,17 @@
+{
+  "name": "intelistock-root",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "app",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently --names \"vite,api\" --prefix-colors \"cyan,yellow\" \"npm run dev --workspace=app\" \"npm run dev --workspace=server\"",
+    "build": "npm run build --workspace=app && npm run build --workspace=server",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
