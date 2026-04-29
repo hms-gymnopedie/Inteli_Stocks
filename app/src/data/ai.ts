@@ -1,7 +1,8 @@
-// AI mock fetchers — signals, insights, hedge proposals, and verdicts.
-// Data lifted from Overview.tsx (signals) and Portfolio.tsx (insights).
-// All stream functions are finite AsyncIterable generators; real Claude API
-// streaming will be added in B2-AI and B3-*-AI.
+// AI fetchers — signals, insights, hedge proposals, and verdicts.
+// B2-AI: all four functions now call the backend at /api/ai/*.
+// If the backend responds 503 (ANTHROPIC_API_KEY not configured) or is
+// unreachable, each function falls back to the inline mock implementation
+// so the UI keeps working locally without an API key.
 
 import type {
   AIInsight,
@@ -11,13 +12,17 @@ import type {
   HedgeProposal,
 } from './types';
 
-// ─── Helper ───────────────────────────────────────────────────────────────────
+// ─── API base ────────────────────────────────────────────────────────────────
+
+const AI_BASE = '/api/ai';
+
+// ─── Helper ──────────────────────────────────────────────────────────────────
 
 function delay(): Promise<void> {
   return new Promise((r) => setTimeout(r, 50 + Math.random() * 100));
 }
 
-// ─── Mock datasets ────────────────────────────────────────────────────────────
+// ─── Mock datasets (kept inline as fallback) ─────────────────────────────────
 
 const MOCK_SIGNALS: AISignal[] = [
   {
@@ -87,7 +92,7 @@ const MOCK_VERDICT_NVDA: AIVerdict = {
   symbol:         'NVDA',
   verdict:        'ACCUMULATE',
   riskScore:      3,
-  convictionScore:72,
+  convictionScore: 72,
   summary:
     'Momentum + earnings revisions positive; valuation full but justified by AI capex cycle. Stagger entries below $890 with 6M horizon.',
   axes: [
@@ -107,51 +112,184 @@ const MOCK_HEDGE_PROPOSAL: HedgeProposal = {
   actions:              ['SIMULATE', 'DISMISS'],
 };
 
+// ─── Mock generators (fallback) ───────────────────────────────────────────────
+
+async function* mockSignals(): AsyncIterable<AISignal> {
+  for (const signal of MOCK_SIGNALS) {
+    await new Promise<void>((r) => setTimeout(r, 1500 + Math.random() * 1500));
+    yield signal;
+  }
+}
+
+async function* mockInsights(_portfolioId: string): AsyncIterable<AIInsight> {
+  for (const insight of MOCK_INSIGHTS) {
+    await new Promise<void>((r) => setTimeout(r, 1500 + Math.random() * 1500));
+    yield insight;
+  }
+}
+
+// ─── SSE consumer helper ──────────────────────────────────────────────────────
+
+/**
+ * Opens an EventSource to a GET SSE endpoint and yields each parsed event
+ * payload as an AsyncIterable. Closes when the 'done' event arrives or on error.
+ *
+ * T        — the type of data yielded per event
+ * eventName — SSE event name to listen for (e.g. 'signal' or 'insight')
+ */
+async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> {
+  // EventSource only works in browser environments. In SSR / test contexts
+  // where EventSource is absent we fall back to the mock stream (caller handles).
+  if (typeof EventSource === 'undefined') return;
+
+  const es = new EventSource(url);
+  const queue: T[] = [];
+  let done = false;
+  let error: Error | null = null;
+
+  // Resolve / reject handles to wake the async generator
+  let resolve: (() => void) | null = null;
+
+  function wake(): void {
+    if (resolve) { resolve(); resolve = null; }
+  }
+
+  es.addEventListener(eventName, (e: MessageEvent) => {
+    try {
+      queue.push(JSON.parse((e as MessageEvent).data) as T);
+      wake();
+    } catch {
+      // malformed JSON from server — skip
+    }
+  });
+
+  es.addEventListener('done', () => {
+    done = true;
+    es.close();
+    wake();
+  });
+
+  es.addEventListener('error', (e) => {
+    error = new Error(`SSE error on ${url}: ${JSON.stringify(e)}`);
+    done = true;
+    es.close();
+    wake();
+  });
+
+  while (true) {
+    // Drain any queued items first
+    while (queue.length > 0) {
+      yield queue.shift()!;
+    }
+    if (done) break;
+    // Wait for the next event
+    await new Promise<void>((r) => { resolve = r; });
+  }
+
+  if (error) throw error;
+}
+
 // ─── Exported fetchers / generators ──────────────────────────────────────────
 
 /**
  * Streams AI signal cards (overview right panel) as an AsyncIterable.
- * Yields each signal with a 1500–3000ms gap, then ends.
- * B3-OV-AI will replace this with a real Claude API call.
+ * Tries the backend SSE endpoint first; falls back to mock on 503 / network error.
  */
 export async function* streamSignals(): AsyncIterable<AISignal> {
-  for (const signal of MOCK_SIGNALS) {
-    const gap = 1500 + Math.random() * 1500;
-    await new Promise<void>((r) => setTimeout(r, gap));
-    yield signal;
+  // Probe the backend: if it returns 503 (no key), use mock immediately.
+  try {
+    const probe = await fetch(`${AI_BASE}/signals`, { method: 'HEAD' }).catch(
+      () => null,
+    );
+    // HEAD on SSE endpoint may return 200 or 405 depending on Express version.
+    // A 503 means anthropic_not_configured → fallback.
+    if (probe && probe.status === 503) {
+      yield* mockSignals();
+      return;
+    }
+  } catch {
+    yield* mockSignals();
+    return;
+  }
+
+  try {
+    yield* consumeSSE<AISignal>(`${AI_BASE}/signals`, 'signal');
+  } catch {
+    yield* mockSignals();
   }
 }
 
 /**
  * Streams AI insight cards for the portfolio feed as an AsyncIterable.
- * The `portfolioId` parameter is reserved for multi-portfolio support in B5.
- * Yields each insight with a 1500–3000ms gap, then ends.
- * B3-PF-AI will replace this with a real Claude API call.
+ * The `portfolioId` parameter is forwarded to the backend for scoping.
+ * Falls back to mock on 503 / network error.
  */
-export async function* streamInsights(_portfolioId: string): AsyncIterable<AIInsight> {
-  for (const insight of MOCK_INSIGHTS) {
-    const gap = 1500 + Math.random() * 1500;
-    await new Promise<void>((r) => setTimeout(r, gap));
-    yield insight;
+export async function* streamInsights(portfolioId: string): AsyncIterable<AIInsight> {
+  const url = `${AI_BASE}/insights?portfolioId=${encodeURIComponent(portfolioId)}`;
+
+  try {
+    const probe = await fetch(url, { method: 'HEAD' }).catch(() => null);
+    if (probe && probe.status === 503) {
+      yield* mockInsights(portfolioId);
+      return;
+    }
+  } catch {
+    yield* mockInsights(portfolioId);
+    return;
+  }
+
+  try {
+    yield* consumeSSE<AIInsight>(url, 'insight');
+  } catch {
+    yield* mockInsights(portfolioId);
   }
 }
 
 /**
  * Returns a hedge proposal for the given geo exposure string.
- * B3-GE-AI will replace this with a Claude API call with prompt caching.
+ * Falls back to mock on 503 / network error.
  */
-export async function proposeHedge(_exposure: string): Promise<HedgeProposal> {
-  await delay();
-  return MOCK_HEDGE_PROPOSAL;
+export async function proposeHedge(exposure: string): Promise<HedgeProposal> {
+  try {
+    const res = await fetch(`${AI_BASE}/hedge`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ exposure }),
+    });
+    if (!res.ok) {
+      // 503 = not configured; anything else = upstream error → fallback
+      return MOCK_HEDGE_PROPOSAL;
+    }
+    return (await res.json()) as HedgeProposal;
+  } catch {
+    await delay();
+    return MOCK_HEDGE_PROPOSAL;
+  }
 }
 
 /**
  * Returns the AI investment verdict (conviction score + 5-axis breakdown) for a symbol.
- * Mock only has data for NVDA; other symbols get a neutral placeholder.
- * B3-DT-AI will replace this with a Claude API call.
+ * Falls back to mock data on 503 / network error.
+ * Mock only has full data for NVDA; other symbols get a neutral placeholder.
  */
 export async function getVerdict(symbol: string): Promise<AIVerdict> {
-  await delay();
+  try {
+    const res = await fetch(`${AI_BASE}/verdict`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ symbol }),
+    });
+    if (!res.ok) {
+      return mockVerdict(symbol);
+    }
+    return (await res.json()) as AIVerdict;
+  } catch {
+    await delay();
+    return mockVerdict(symbol);
+  }
+}
+
+function mockVerdict(symbol: string): AIVerdict {
   if (symbol === 'NVDA') return MOCK_VERDICT_NVDA;
   return {
     symbol,
