@@ -151,7 +151,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
-| B2-MAP | WorldMap 재구현 (TopoJSON + d3-geo, 줌·팬, 레이어, 핀 클릭) | `app/src/lib/WorldMap/*` | frontend-ui-integrator + general-purpose (TopoJSON 출처 조사) | ⬜ | |
+| B2-MAP | WorldMap 재구현 (TopoJSON + d3-geo, 줌·팬, 레이어, 핀 클릭) | `app/src/lib/WorldMap/*` | frontend-ui-integrator + general-purpose (TopoJSON 출처 조사) | 🟡 | |
 | B2-SRV | 로컬 Express 서버 부트스트랩 (포트 3001), Vite `/api` 프록시 설정 | `server/index.ts`, `server/package.json`, `vite.config.ts` 수정 | backend-api-data-engineer | ⬜ | npm workspace로 묶기 vs 별도 디렉토리 결정. 단일 `npm run dev`로 동시 기동 (concurrently) |
 | B2-MD | Market data adapter — `yahoo-finance2` 래퍼 + REST 라우트 + in-memory 캐시 (30~60s) | `server/providers/yahoo.ts`, `server/routes/{market,security,portfolio}.ts`, `app/src/data/*.ts` 본문 swap | backend-api-data-engineer | ⬜ | by B2-SRV. ticker→CIK 매핑은 SEC `company_tickers.json` 1회 캐시 |
 | B2-FRED | FRED 어댑터 (CPI 등 매크로) — 선택. API key 미설정 시 mock 유지 | `server/providers/fred.ts`, `server/routes/macro.ts` | backend-api-data-engineer | ⬜ | by B2-SRV. .env로 키 관리 |
