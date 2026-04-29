@@ -143,7 +143,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
 | B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: 인라인 배열 → `data/market.ts`·`data/portfolio.ts` 호출 |
-| B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: → `data/portfolio.ts` |
+| B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | ✅ | 4 sections wired to `data/portfolio.ts` via `useAsync`; KPI 1D/WTD/MTD/YTD toggle, EquityCurve range+benchmark, Allocation by-toggle (real refetch) with drill-in scrolling Holdings into view, Holdings sortable headers + text filter. Dimmed placeholders for loading. Build passes |
 | B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: → `data/security.ts` |
 | B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: → `data/geo.ts` |
 
@@ -157,7 +157,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | B2-FRED | FRED 어댑터 (CPI 등 매크로) — 선택. API key 미설정 시 mock 유지 | `server/providers/fred.ts`, `server/routes/macro.ts` | backend-api-data-engineer | ⬜ | by B2-SRV. .env로 키 관리 |
 | B2-SEC | SEC EDGAR 어댑터 (공시 원문 메타데이터) | `server/providers/sec.ts`, `server/routes/security.ts` 확장 | backend-api-data-engineer | ⬜ | by B2-SRV. User-Agent 헤더 필수 |
 | B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 응답 캐시) | `server/routes/ai.ts` | backend-api-data-engineer + claude-api skill | ⬜ | by B2-SRV. ANTHROPIC_API_KEY env, 모델 `claude-opus-4-7` 기본, prompt caching 필수 |
-| B2-TW | Tweaks 확장 (timezone, locale, currency, 컬럼설정 영속화) | `app/src/lib/tweaks.tsx` | frontend-ui-integrator | ⬜ | localStorage 영속화 |
+| B2-TW | Tweaks 확장 (timezone, locale, currency, 컬럼설정 영속화) | `app/src/lib/tweaks.tsx` | frontend-ui-integrator | ✅ | localStorage 영속화 (`intelistock.tweaks.v1`), timezone/locale/currency selects, reset 버튼, locale → `<html lang>` 반영. 기존 useTweaks consumers 호환. |
 
 ### 배치 B3 — AI 의존 섹션 (B2-AI 완료 후)
 
