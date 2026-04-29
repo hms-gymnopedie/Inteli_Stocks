@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-04-29 (Phase 1 완료 — 7/7 모두 ✅)
+**Last updated:** 2026-04-29 (Phase 2 완료 — B2-MD/FRED/SEC/AI 모두 ✅)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -142,37 +142,21 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
-<<<<<<< Updated upstream
-| B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | ✅ | 9/9 완료. 완료: HeroChart·SectorHeat·SectorFlow·MacroMonitor·SessionVolume·TodaysEvents (`0f02f7b`) + Workspaces (`c3e1364`) + IndicesStrip(`aa5b74a` — `useNavigate` → `/detail`, `aria-label`로 a11y 보강, dimmed skeleton) + Watchlist(`9e8a161` — `getWatchlist('KR')` import을 `data/portfolio.ts`로 이동, dimmed skeleton). ⚠️ `aa5b74a`에 B1-GE의 AffectedPortfolio 변경분이 staging-bleed로 함께 들어감 |
-| B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | ✅ | 4 sections all wired to `data/portfolio.ts` via `useAsync`. ⚠️ 변경분이 B1-OV 커밋(`0f02f7b`)에 묶여 들어감 — 두 에이전트가 동일 working tree 공유한 결과. KPI 1D/WTD/MTD/YTD toggle, EquityCurve range+benchmark, Allocation by-toggle, Holdings sortable + text filter. Build passes |
-| B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | ✅ | 7/7 완료. Header(`11f2bee`)·ValuationGrid(`a1ccce9`)·AnalystTargets(`fb6eff1`)·Peers(`e2e2ee4`)·MainChart(`e5a6971`)·RSIPanel(`c1f0cca`)·MACDPanel(`cf38ce0`). 단순 prop-drilling 패턴 — `SYMBOL = 'NVDA'` 상수를 `index.tsx`에 두고 각 섹션이 `{ symbol: string }` prop을 받음 (no context). MainChart studies pills(RSI/MACD/VOL) state는 `index.tsx`에 lift, RSI/MACD panel 가시성도 같이 따라감. RSI(14)·MACD(12,26,9)는 `getOHLC` close에서 client-side 파생. Skeletons + dimming for loading. Build passes after each commit. |
-| B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | ✅ | 5/5 완료. Hotspots(`38f3a7e`)·RiskLegend(`1a92b13`)·GlobalRiskIndex(`ac0cf0e`)·AffectedPortfolio(`aa5b74a` — staging-bleed로 B1-OV IndicesStrip 커밋에 함께 들어감, `getAffected('default')` + dimmed skeleton)·LayerToggles(`fb45fd0` — `useAsync(getLayers)` + 로컬 toggle state, `button[role=switch]`로 a11y 보강, B2-MAP 영역이라 WorldMap props 확장은 보류). |
-=======
-| B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: 인라인 배열 → `data/market.ts`·`data/portfolio.ts` 호출 |
-| B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | ✅ | 4 sections wired to `data/portfolio.ts` via `useAsync`; KPI 1D/WTD/MTD/YTD toggle, EquityCurve range+benchmark, Allocation by-toggle (real refetch) with drill-in scrolling Holdings into view, Holdings sortable headers + text filter. Dimmed placeholders for loading. Build passes |
-| B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: → `data/security.ts` |
-| B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: → `data/geo.ts` |
->>>>>>> Stashed changes
+| B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | ✅ | 9/9 완료. HeroChart·SectorHeat·SectorFlow·MacroMonitor·SessionVolume·TodaysEvents (`0f02f7b`) + Workspaces (`c3e1364`) + IndicesStrip(`aa5b74a`, useNavigate→/detail, aria-label) + Watchlist(`9e8a161`). |
+| B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | ✅ | 4 sections wired (B1-OV 커밋 `0f02f7b`에 staging-bleed로 묶여 들어감). KPI 1D/WTD/MTD/YTD toggle, EquityCurve range+benchmark, Allocation by-toggle, Holdings sortable + text filter. |
+| B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | ✅ | 7/7 완료. Header(`11f2bee`)·ValuationGrid(`a1ccce9`)·AnalystTargets(`fb6eff1`)·Peers(`e2e2ee4`)·MainChart(`e5a6971`)·RSIPanel(`c1f0cca`)·MACDPanel(`cf38ce0`). 단순 prop-drilling, RSI(14)·MACD(12,26,9) client-side derive from getOHLC. |
+| B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | ✅ | 5/5 완료. Hotspots(`38f3a7e`)·RiskLegend(`1a92b13`)·GlobalRiskIndex(`ac0cf0e`)·AffectedPortfolio(`aa5b74a`)·LayerToggles(`fb45fd0`). |
 
 ### 배치 B2 — 도메인 인프라 (B1과 병렬, 다른 디렉토리)
 
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
-<<<<<<< Updated upstream
-| B2-MAP | WorldMap 재구현 (TopoJSON + d3-geo, 줌·팬, 레이어, 핀 클릭) | `app/src/lib/WorldMap/*` | frontend-ui-integrator | ✅ | TopoJSON(`world-atlas/countries-110m.json`) + `topojson-client.feature()` + `d3-geo.geoEqualEarth().fitSize([1000,500])`. heat 키는 ISO 3166-1 alpha-3 (USA/KOR/JPN/...) — UN-M49 → ISO-3 lookup을 데이터 로더에 내장. pins는 lat/lng 우선, 레거시 x/y로 폴백 (additive `MapPin.lat/lng`). 4-commit split: deps(`0f09a7f`) → component(`c87cf5a`) → primitives 재export(`746a2e8`) → geo.ts ISO-3 마이그레이션. `lib/primitives.tsx`의 inline 손그림 SVG 제거. 줌·팬/핀-클릭 인터랙션은 후속 작업. |
-| B2-SRV | 로컬 Express 서버 부트스트랩 (포트 3001), Vite `/api` 프록시 설정 | `server/*`, `vite.config.ts`, root `package.json` (workspaces) | backend-api-data-engineer (메인 마무리) | ✅ | npm workspaces (root pkg) + `concurrently`로 `npm run dev` 단일 명령. tsx watch (server), Vite proxy `/api`→3001. `/api/health` 스모크 테스트 통과. (commit `60b7e49` — 에이전트가 limit으로 미커밋이라 메인이 마무리) |
-| B2-MD | Market data adapter — `yahoo-finance2` 래퍼 + REST 라우트 + in-memory 캐시 (30~60s) | `server/providers/yahoo.ts`, `server/routes/{market,security,portfolio}.ts`, `app/src/data/*.ts` 본문 swap | backend-api-data-engineer | ✅ | yahoo-finance2 v3.14. Endpoints: 9 market + 7 security (not filings) + 7 portfolio = 23 total. Cache: 30s quotes/search, 60s historical/summary. Fallbacks: mock data on yahoo errors (profile/fundamentals/peers/ohlc). CPI: dynamic import FRED with hardcoded fallback. SP-constituents/fear-greed/calendar/session-volume: static mock server-side. Portfolio backing store: `~/.intelistock/portfolio.json` (auto-seeded). E2E: 13/13. |
-| B2-FRED | FRED 어댑터 (CPI 등 매크로) — 선택. API key 미설정 시 mock 유지 | `server/providers/fred.ts`, `server/routes/macro.ts` | backend-api-data-engineer | 🟡 | by B2-SRV. .env로 키 관리 |
-| B2-SEC | SEC EDGAR 어댑터 (공시 원문 메타데이터) | `server/providers/sec.ts`, `server/routes/security.ts` 확장 | backend-api-data-engineer | 🟡 | by B2-SRV. User-Agent 헤더 필수 |
-| B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 응답 캐시) | `server/routes/ai.ts` | backend-api-data-engineer + claude-api skill | ✅ | Model: `claude-opus-4-7`. Caching: `cache_control:{type:'ephemeral'}` on system-prompt content block for all 4 endpoints. SSE: GET /signals (AISignal[]) + GET /insights (AIInsight[]) fan-out parsed arrays as individual events. POST /verdict + /hedge return full JSON. Fallback: frontend probes with HEAD; 503→mock generators used inline. Provider: `server/src/providers/anthropic.ts` (lazy singleton). App build: 215 modules / 371 KB ✓. |
-=======
-| B2-MAP | WorldMap 재구현 (TopoJSON + d3-geo, 줌·팬, 레이어, 핀 클릭) | `app/src/lib/WorldMap/*` | frontend-ui-integrator + general-purpose (TopoJSON 출처 조사) | 🟡 | |
-| B2-SRV | 로컬 Express 서버 부트스트랩 (포트 3001), Vite `/api` 프록시 설정 | `server/index.ts`, `server/package.json`, `vite.config.ts` 수정 | backend-api-data-engineer | ⬜ | npm workspace로 묶기 vs 별도 디렉토리 결정. 단일 `npm run dev`로 동시 기동 (concurrently) |
-| B2-MD | Market data adapter — `yahoo-finance2` 래퍼 + REST 라우트 + in-memory 캐시 (30~60s) | `server/providers/yahoo.ts`, `server/routes/{market,security,portfolio}.ts`, `app/src/data/*.ts` 본문 swap | backend-api-data-engineer | ⬜ | by B2-SRV. ticker→CIK 매핑은 SEC `company_tickers.json` 1회 캐시 |
-| B2-FRED | FRED 어댑터 (CPI 등 매크로) — 선택. API key 미설정 시 mock 유지 | `server/providers/fred.ts`, `server/routes/macro.ts` | backend-api-data-engineer | ⬜ | by B2-SRV. .env로 키 관리 |
-| B2-SEC | SEC EDGAR 어댑터 (공시 원문 메타데이터) | `server/providers/sec.ts`, `server/routes/security.ts` 확장 | backend-api-data-engineer | ⬜ | by B2-SRV. User-Agent 헤더 필수 |
-| B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 응답 캐시) | `server/routes/ai.ts` | backend-api-data-engineer + claude-api skill | ⬜ | by B2-SRV. ANTHROPIC_API_KEY env, 모델 `claude-opus-4-7` 기본, prompt caching 필수 |
->>>>>>> Stashed changes
+| B2-MAP | WorldMap 재구현 (TopoJSON + d3-geo, 줌·팬, 레이어, 핀 클릭) | `app/src/lib/WorldMap/*` | frontend-ui-integrator | ✅ | TopoJSON(`world-atlas/countries-110m.json`) + `geoEqualEarth().fitSize([1000,500])`. heat 키 ISO 3166-1 alpha-3, M49→ISO-3 lookup 내장. pins lat/lng 우선, 레거시 x/y 폴백. 4-commit split (`0f09a7f` → `c87cf5a` → `746a2e8` → `5b7a7fe`). 줌·팬/핀-클릭은 후속. |
+| B2-SRV | 로컬 Express 서버 부트스트랩 (포트 3001), Vite `/api` 프록시 | `server/*`, `vite.config.ts`, root `package.json` (workspaces) | backend-api-data-engineer (메인 마무리) | ✅ | npm workspaces + `concurrently`로 `npm run dev` 단일. tsx watch + Vite proxy `/api`→3001. `/api/health` 스모크 통과 (`60b7e49`). |
+| B2-MD | Market data adapter — `yahoo-finance2` 래퍼 + REST + in-memory 캐시 (30~60s) | `server/providers/yahoo.ts`, `server/routes/{market,security,portfolio}.ts`, `app/src/data/*.ts` 본문 swap | backend-api-data-engineer | ✅ | yahoo-finance2 v3.14. 23 endpoints: 9 market + 7 security + 7 portfolio. Cache 30s quotes / 60s historical. Fallback mock on yahoo errors. CPI: dynamic import FRED + hardcoded fallback. Portfolio backing: `~/.intelistock/portfolio.json`. (commits `f832399`→`5e5020f`→`b6dd421`→`33c4a33`→`177828f`→`14db3d3`→`ec8ac01`) E2E 13/13. |
+| B2-FRED | FRED 어댑터 (CPI 등 매크로) — 선택. API key 미설정 시 mock 유지 | `server/providers/fred.ts`, `server/routes/macro.ts` | backend-api-data-engineer | ✅ | Provider with `isConfigured`/`getCPI`(CPIAUCSL YoY)/`getFedFunds`(FEDFUNDS). Routes (`a41664a`+`601dcee`): GET /cpi, GET /fed-funds. 503 guard middleware로 키 없으면 fall-through. 1h TTL cache. (에이전트가 마무리 직전 permissions skill로 빠져 메인이 route 커밋) |
+| B2-SEC | SEC EDGAR 어댑터 (공시 원문 메타데이터) | `server/providers/sec.ts`, `server/routes/security.ts` 확장 | backend-api-data-engineer | ✅ | Provider `getCompanyTickers()` (1회 캐시) + `getRecentFilings(cik,limit)`. Routes endpoint `GET /:symbol/filings` — staging-bleed로 B2-MD `33c4a33` commit에 함께 묶임 (메시지 명시). 한국 ticker(.KS/.KQ)는 `[]` 200. User-Agent 헤더. (`f0cc620`) |
+| B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 응답 캐시) | `server/routes/ai.ts` | backend-api-data-engineer + claude-api skill | ✅ | Model `claude-opus-4-7`. `cache_control:{type:'ephemeral'}` on system-prompt for all 4 endpoints. SSE GET /signals + /insights 파싱 후 이벤트 fan-out. POST /verdict + /hedge JSON. Frontend HEAD probe → 503 시 mock generator로 fallback. (`489b8dc`→`7fc9027`→`415c93c`→`ac5c914`) |
 | B2-TW | Tweaks 확장 (timezone, locale, currency, 컬럼설정 영속화) | `app/src/lib/tweaks.tsx` | frontend-ui-integrator | ✅ | localStorage 영속화 (`intelistock.tweaks.v1`), timezone/locale/currency selects, reset 버튼, locale → `<html lang>` 반영. 기존 useTweaks consumers 호환. |
 
 ### 배치 B3 — AI 의존 섹션 (B2-AI 완료 후)
@@ -246,6 +230,8 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 - ✅ **Pre-Phase 0** — Vite+React+TS 스캐폴드 (commit `1445063`)
 - ✅ **§7 결정 잠금 (5/5)** (commit `f3773f3`)
 - ✅ **Phase 0 완료 (3/3)** — 0-A `316f97f` · 0-B `01dc917` · 0-C `ac08ef6`
+- ✅ **Phase 2 완료 (5/5: prep + MD + FRED + SEC + AI)** — 23 market+security+portfolio + 4 AI + 2 macro + 1 SEC filings endpoint. 프론트엔드 `data/*.ts` 본문 모두 fetch swap. ANTHROPIC_API_KEY/FRED_API_KEY 미설정 시 503 + mock fallback. 실데이터 백엔드로 E2E 13/13 통과 (3.5s). 실행: `npm run dev` (root) → Vite :5180 + Express :3001. 두 에이전트(B2-FRED, B2-SEC)가 permissions skill 늪에 빠져 메인이 마무리 커밋.
+
 - ✅ **Phase 1 완료 (7/7)** — 두 라운드에 걸쳐 모두 완료:
   - B1-OV ✅ 9/9 · B1-PF ✅ 4/4 · B1-DT ✅ 7/7 · B1-GE ✅ 5/5
   - B2-MAP ✅ TopoJSON · B2-SRV ✅ Express + Vite 프록시 · B2-TW ✅ 영속화
