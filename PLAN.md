@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-04-28 (§7 5건 잠금, B2를 SRV/MD/FRED/SEC/AI/TW로 세분화)
+**Last updated:** 2026-04-28 (Phase 0 완료 — 0-A·0-B·0-C 모두 ✅)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -64,9 +64,9 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 ### Task 0-C — `lib/format.ts`
 
-**Agent:** frontend-ui-integrator · **Status:** ⬜
+**Agent:** main · **Status:** ✅
 
-`formatPrice(value, currency)`, `formatPct(v, signed?)`, `formatBp(v)`, `formatTime(ts, tz)`, `formatVol(n)`, `formatCurrency(v, code)`, `formatRange(range)` — 순수 함수, 단위테스트 동봉.
+> **Notes (2026-04-28):** 10 pure formatters in `app/src/lib/format.ts`: `formatPrice`, `formatPct`, `formatBp`, `formatVol`, `formatTime`, `formatDateShort`, `formatCurrency`, `formatRange`, `formatChange`, `formatWeight`. Uses typographic minus (U+2212) to match prototype. KRW/JPY auto-default to 0 decimals. Unit tests deferred to B4 (no test runner installed yet — will land with B4-E2E).
 
 ---
 
@@ -142,10 +142,10 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
-| B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | ⬜ | |
-| B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | ⬜ | |
-| B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | ⬜ | |
-| B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | ⬜ | |
+| B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | ⬜ | **데이터 와이어링 포함**: 인라인 배열 → `data/market.ts`·`data/portfolio.ts` 호출 |
+| B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | ⬜ | **데이터 와이어링 포함**: → `data/portfolio.ts` |
+| B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | ⬜ | **데이터 와이어링 포함**: → `data/security.ts` |
+| B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | ⬜ | **데이터 와이어링 포함**: → `data/geo.ts` |
 
 ### 배치 B2 — 도메인 인프라 (B1과 병렬, 다른 디렉토리)
 
@@ -227,9 +227,13 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 ## 6. Current state
 
-- ✅ **Pre-Phase 0** — Vite+React+TS 스캐폴드, 4 페이지 정적 구현(Overview/Portfolio/Geo/Detail), 디자인 토큰, Tweaks 패널, 라우팅, 빌드 검증, GitHub 연결 (commit `1445063`)
-- ✅ **§7 결정 잠금 (5/5)** — 공급자 yahoo-finance2, 호스팅 로컬 Express, 심볼 Yahoo 표기, 시각 회귀 자체 Playwright (commit pending)
-- 👉 **다음**: Phase 0 (0-A → 0-B → 0-C). 사용자 승인 대기 중.
+- ✅ **Pre-Phase 0** — Vite+React+TS 스캐폴드, 4 페이지 정적 구현, 디자인 토큰, Tweaks 패널, 라우팅, 빌드 검증, GitHub 연결 (commit `1445063`)
+- ✅ **§7 결정 잠금 (5/5)** — yahoo-finance2 / 로컬 Express / Yahoo 심볼 / Playwright (commit `f3773f3`)
+- ✅ **Phase 0 완료 (3/3)** —
+  - 0-A 데이터 레이어 (commit `316f97f`): 6 파일, 36 타입, 35 함수, ~1.3K LOC
+  - 0-B 페이지 분해 (commit `01dc917`): 4 monolithic → 33 sections + 4 shells
+  - 0-C 포맷터 (commit pending): 10 pure formatters in `lib/format.ts`
+- 👉 **다음**: **Phase 1** — B1 4개(OV·PF·DT·GE) + B2 4개(MAP·SRV·MD·TW) 동시 실행 가능. B1은 0-A 데이터 와이어링 포함, B2-MD/FRED/SEC/AI는 B2-SRV에 blocked-by.
 
 ### 데이터 수집 전략 요약
 
