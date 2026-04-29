@@ -145,7 +145,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: 인라인 배열 → `data/market.ts`·`data/portfolio.ts` 호출 |
 | B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: → `data/portfolio.ts` |
 | B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: → `data/security.ts` |
-| B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | ⬜ | **데이터 와이어링 포함**: → `data/geo.ts` |
+| B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | 🟡 | **데이터 와이어링 포함**: → `data/geo.ts` |
 
 ### 배치 B2 — 도메인 인프라 (B1과 병렬, 다른 디렉토리)
 
