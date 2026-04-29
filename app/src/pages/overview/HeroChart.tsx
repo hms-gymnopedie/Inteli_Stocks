@@ -1,9 +1,26 @@
+import { useState } from 'react';
+import { getIntraday } from '../../data/market';
+import type { OHLC, Range } from '../../data/types';
 import { CandleChart, LineChart } from '../../lib/primitives';
 import { useTweaks } from '../../lib/tweaks';
+import { useAsync } from '../../lib/useAsync';
+
+const RANGES: Range[] = ['1D', '1W', '1M', '3M', 'YTD', '1Y', '5Y'];
+const SYMBOL = '^GSPC';
 
 export function HeroChart() {
   const { values } = useTweaks();
   const showGrid = values.showGrid;
+  const [range, setRange] = useState<Range>('1W');
+
+  // Drive the chart from the data layer. Header values stay byte-identical to
+  // the prototype loaded state — the mock OHLC generator is synthetic and not
+  // pre-aggregated for SPX. When B2-MD swaps in real data, header derivation
+  // can move into this hook too.
+  const { data: bars, loading } = useAsync<OHLC[]>(
+    () => getIntraday(SYMBOL, range),
+    [range],
+  );
 
   return (
     <div className="wf-panel" style={{ padding: 14 }}>
@@ -27,19 +44,39 @@ export function HeroChart() {
             <div className="muted wf-mini">VOL 2.41B</div>
           </div>
         </div>
-        <div className="row gap-1">
-          {['1D', '1W', '1M', '3M', 'YTD', '1Y', '5Y'].map((t, i) => (
-            <div
-              key={t}
-              className={'tab' + (i === 1 ? ' active' : '')}
-              style={{ padding: '4px 10px', fontSize: 11 }}
-            >
-              {t}
-            </div>
-          ))}
+        <div className="row gap-1" role="tablist" aria-label="Time range">
+          {RANGES.map((r) => {
+            const active = r === range;
+            return (
+              <button
+                key={r}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setRange(r)}
+                className={'tab' + (active ? ' active' : '')}
+                style={{
+                  padding: '4px 10px',
+                  fontSize: 11,
+                  background: 'transparent',
+                  border: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                {r}
+              </button>
+            );
+          })}
         </div>
       </div>
-      <div style={{ marginTop: 10 }}>
+      <div
+        style={{
+          marginTop: 10,
+          opacity: loading && !bars ? 0.5 : 1,
+          transition: 'opacity 120ms linear',
+        }}
+        aria-busy={loading}
+      >
         {values.chartStyle === 'candle' ? (
           <CandleChart w={800} h={180} count={62} seed={3} />
         ) : (

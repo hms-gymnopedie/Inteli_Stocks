@@ -1,6 +1,32 @@
+import { getMacro } from '../../data/market';
+import type { MacroIndicator, MacroKey } from '../../data/types';
 import { Spark } from '../../lib/primitives';
+import { useAsync } from '../../lib/useAsync';
+
+const KEYS: MacroKey[] = ['US10Y', 'CPI_YOY', 'USD_KRW', 'WTI'];
+
+const SKELETON: MacroIndicator[] = KEYS.map((key, i) => ({
+  key,
+  label: '—',
+  value: '—',
+  delta: '',
+  seed: i,
+  trend: 0,
+}));
+
+function isPositive(delta: string): boolean {
+  // '+2.1bp' → up, '−0.10' / '-1.18%' → down. Empty (skeleton) returns up.
+  if (!delta) return true;
+  return delta.startsWith('+');
+}
 
 export function MacroMonitor() {
+  const { data, loading } = useAsync<MacroIndicator[]>(
+    () => getMacro(KEYS),
+    [],
+  );
+  const items = data ?? SKELETON;
+
   return (
     <div className="wf-panel" style={{ padding: 12 }}>
       <div className="row between">
@@ -13,65 +39,34 @@ export function MacroMonitor() {
           gridTemplateColumns: 'repeat(4, 1fr)',
           gap: 12,
           marginTop: 10,
+          opacity: loading && !data ? 0.4 : 1,
+          transition: 'opacity 120ms linear',
         }}
+        aria-busy={loading}
       >
-        {[
-          {
-            t: 'US 10Y',
-            v: '4.412',
-            d: '+2.1bp',
-            s: 11,
-            tr: 0.5,
-          },
-          {
-            t: 'CPI YoY',
-            v: '3.20%',
-            d: '−0.10',
-            s: 12,
-            tr: -0.3,
-          },
-          {
-            t: 'USD/KRW',
-            v: '1,378.4',
-            d: '+0.42%',
-            s: 13,
-            tr: 0.4,
-          },
-          {
-            t: 'WTI Crude',
-            v: '$78.42',
-            d: '−1.18%',
-            s: 14,
-            tr: -0.5,
-          },
-        ].map((m, i) => (
+        {items.map((m, i) => (
           <div
-            key={m.t}
+            key={m.key}
             style={{
               borderLeft: i ? '1px solid var(--hairline)' : 0,
               paddingLeft: i ? 12 : 0,
             }}
           >
-            <div className="wf-mini">{m.t}</div>
-            <div
-              className="wf-num"
-              style={{ fontSize: 22, marginTop: 2 }}
-            >
-              {m.v}
+            <div className="wf-mini">{m.label}</div>
+            <div className="wf-num" style={{ fontSize: 22, marginTop: 2 }}>
+              {m.value}
             </div>
             <div
               className="wf-mono"
               style={{
                 fontSize: 10,
-                color: m.d.startsWith('+')
-                  ? 'var(--up)'
-                  : 'var(--down)',
+                color: isPositive(m.delta) ? 'var(--up)' : 'var(--down)',
               }}
             >
-              {m.d}
+              {m.delta || '—'}
             </div>
             <div style={{ marginTop: 4 }}>
-              <Spark seed={m.s} trend={m.tr} w={200} h={26} />
+              <Spark seed={m.seed} trend={m.trend} w={200} h={26} />
             </div>
           </div>
         ))}
