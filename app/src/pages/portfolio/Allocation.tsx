@@ -77,9 +77,9 @@ export function Allocation({ onSliceClick }: AllocationProps) {
           // top-most index.tsx, which decides what to do (e.g. scroll
           // HoldingsTable into view filtered by sector).
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {items.map((slice) => (
+            {items.map((slice, i) => (
               <button
-                key={slice.name}
+                key={`${by}-${i}-${slice.name}`}
                 type="button"
                 onClick={() => onSliceClick(slice, by)}
                 title={`Drill into ${slice.name}`}
