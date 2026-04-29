@@ -178,12 +178,24 @@ export interface RiskFactor {
 /** Region heat level for WorldMap fill. */
 export type RegionHeat = Partial<Record<string, RiskLevel>>;
 
-/** A map pin / event marker. */
+/** A map pin / event marker.
+ *
+ * `x`/`y` (SVG viewBox coords) are kept for backward compatibility with the
+ * legacy hand-drawn WorldMap. New callers should provide `lat`/`lng` so that
+ * the TopoJSON-based WorldMap (B2-MAP) projects pins correctly. If both are
+ * present, the WorldMap prefers `lat`/`lng`. `value` is an optional cluster
+ * count rendered inside the pin (falls back to a level-derived number).
+ */
 export interface MapPin {
   x: number;
   y: number;
   level: RiskLevel;
   label: string;
+  value?: number;
+  /** Latitude in degrees (-90..90). Optional; preferred over `y` when set. */
+  lat?: number;
+  /** Longitude in degrees (-180..180). Optional; preferred over `x` when set. */
+  lng?: number;
 }
 
 /** A trade flow line between two SVG points. */

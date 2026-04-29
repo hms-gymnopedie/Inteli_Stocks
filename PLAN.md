@@ -142,9 +142,9 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
-| B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | 🟡 | **부분완료 (7/9)** rate-limit 종료. 완료: HeroChart·SectorHeat·SectorFlow·MacroMonitor·SessionVolume·TodaysEvents (commit `0f02f7b`) + Workspaces (`c3e1364`). **남은 작업: IndicesStrip, Watchlist** — 재실행 필요 |
+| B1-OV | Overview 차트 섹션 (HeroChart, SectorHeat, SectorFlow, MacroMonitor, SessionVolume, Watchlist, IndicesStrip, TodaysEvents) | `pages/overview/*.tsx` (AI/Sentiment 제외) | frontend-ui-integrator | ✅ | 9/9 완료. 완료: HeroChart·SectorHeat·SectorFlow·MacroMonitor·SessionVolume·TodaysEvents (`0f02f7b`) + Workspaces (`c3e1364`) + IndicesStrip(`aa5b74a` — `useNavigate` → `/detail`, `aria-label`로 a11y 보강, dimmed skeleton) + Watchlist(`9e8a161` — `getWatchlist('KR')` import을 `data/portfolio.ts`로 이동, dimmed skeleton). ⚠️ `aa5b74a`에 B1-GE의 AffectedPortfolio 변경분이 staging-bleed로 함께 들어감 |
 | B1-PF | Portfolio 표/할당 섹션 (KPIStrip, EquityCurve, Allocation, HoldingsTable) | `pages/portfolio/*.tsx` (AI 피드 제외) | frontend-ui-integrator | ✅ | 4 sections all wired to `data/portfolio.ts` via `useAsync`. ⚠️ 변경분이 B1-OV 커밋(`0f02f7b`)에 묶여 들어감 — 두 에이전트가 동일 working tree 공유한 결과. KPI 1D/WTD/MTD/YTD toggle, EquityCurve range+benchmark, Allocation by-toggle, Holdings sortable + text filter. Build passes |
-| B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | ⬜ | **롤백** rate-limit 시점 미커밋 + 빌드 깨짐(`useDetail` export 없음). 6개 파일 변경분 폐기. 재실행 필요 |
+| B1-DT | Detail 차트 섹션 (MainChart, RSI, MACD, ValuationGrid, AnalystTargets, Peers) | `pages/detail/*.tsx` (AIGuide·Disclosures 제외) | frontend-ui-integrator | 🟡 | **재실행 중** prop-drilling pattern (no context). Section-by-section commits. |
 | B1-GE | GeoRisk 사이드 섹션 (Hotspots, AffectedPortfolio, GlobalRiskIndex, LayerToggles, RiskLegend) | `pages/geo/*.tsx` (지도/AI 제외) | frontend-ui-integrator | 🟡 | **부분완료 (3/5)** 완료: Hotspots(`38f3a7e`)·RiskLegend(`1a92b13`)·GlobalRiskIndex(`ac0cf0e`). **남은 작업: LayerToggles, AffectedPortfolio** — 재실행 필요 |
 
 ### 배치 B2 — 도메인 인프라 (B1과 병렬, 다른 디렉토리)
