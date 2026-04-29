@@ -69,7 +69,7 @@ export function Detail() {
                 gap: 10,
               }}
             >
-              {studies.has('RSI') && <RSIPanel />}
+              {studies.has('RSI') && <RSIPanel symbol={SYMBOL} />}
               {studies.has('MACD') && <MACDPanel />}
             </div>
           )}
