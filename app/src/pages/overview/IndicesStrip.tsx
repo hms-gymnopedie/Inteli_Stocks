@@ -1,49 +1,87 @@
-const TICKER_STRIP: [string, string, string, number][] = [
-  ['S&P 500', '5,247.18', '+0.42%', 1],
-  ['NASDAQ', '16,492.7', '+0.71%', 1],
-  ['DOW', '39,218.5', '-0.08%', -1],
-  ['KOSPI', '2,710.3', '+1.24%', 1],
-  ['VIX', '14.82', '-3.10%', -1],
-  ['DXY', '104.12', '+0.18%', 1],
-  ['10Y UST', '4.412%', '+2.1bp', 1],
-  ['BTC', '67,420', '-1.84%', -1],
-];
+import { useNavigate } from 'react-router-dom';
+import { getIndices } from '../../data/market';
+import type { Index } from '../../data/types';
+import { useAsync } from '../../lib/useAsync';
+
+const SKELETON_COUNT = 8;
 
 export function IndicesStrip() {
+  const { data, loading } = useAsync<Index[]>(getIndices, []);
+  const navigate = useNavigate();
+
+  const items: (Index | null)[] = data
+    ? data
+    : Array.from({ length: SKELETON_COUNT }, () => null);
+
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(8, 1fr)',
+        gridTemplateColumns: `repeat(${items.length || SKELETON_COUNT}, 1fr)`,
         borderBottom: '1px solid var(--hairline)',
       }}
     >
-      {TICKER_STRIP.map(([t, p, c, d], i) => (
-        <div
-          key={t}
-          style={{
-            padding: '8px 10px',
-            borderRight: i < 7 ? '1px solid var(--hairline)' : 0,
-          }}
-        >
-          <div className="wf-mini">{t}</div>
-          <div
-            className="wf-mono"
-            style={{ fontSize: 13, color: 'var(--fg)', marginTop: 2 }}
-          >
-            {p}
-          </div>
-          <div
-            className="wf-mono"
+      {items.map((row, i) => {
+        const last = i === items.length - 1;
+        if (!row) {
+          return (
+            <div
+              key={`skeleton-${i}`}
+              style={{
+                padding: '8px 10px',
+                borderRight: !last ? '1px solid var(--hairline)' : 0,
+                opacity: 0.4,
+              }}
+              aria-busy={loading}
+            >
+              <div className="wf-mini">—</div>
+              <div
+                className="wf-mono"
+                style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 2 }}
+              >
+                —
+              </div>
+              <div className="wf-mono" style={{ fontSize: 10, color: 'var(--fg-4)' }}>
+                —
+              </div>
+            </div>
+          );
+        }
+        return (
+          <button
+            key={row.ticker}
+            type="button"
+            onClick={() =>
+              navigate('/detail', { state: { symbol: row.ticker } })
+            }
             style={{
-              fontSize: 10,
-              color: d > 0 ? 'var(--up)' : 'var(--down)',
+              all: 'unset',
+              cursor: 'pointer',
+              padding: '8px 10px',
+              borderRight: !last ? '1px solid var(--hairline)' : 0,
+              display: 'block',
             }}
+            title={`Open ${row.label} detail`}
           >
-            {c}
-          </div>
-        </div>
-      ))}
+            <div className="wf-mini">{row.label}</div>
+            <div
+              className="wf-mono"
+              style={{ fontSize: 13, color: 'var(--fg)', marginTop: 2 }}
+            >
+              {row.price}
+            </div>
+            <div
+              className="wf-mono"
+              style={{
+                fontSize: 10,
+                color: row.direction > 0 ? 'var(--up)' : 'var(--down)',
+              }}
+            >
+              {row.change}
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
