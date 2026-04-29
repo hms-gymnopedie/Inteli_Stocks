@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-04-28
+**Last updated:** 2026-04-28 (§7 5건 잠금, B2를 SRV/MD/FRED/SEC/AI/TW로 세분화)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -28,13 +28,43 @@
 
 ## 1. Phase 0 — Foundations (직렬, 모든 후속 작업의 prerequisite)
 
-이 셋이 끝나기 전에는 페이지 작업을 병렬로 돌리면 무조건 충돌남.
+> **Phase 0은 실제 데이터를 수집하지 않는다.** 타입 + 함수 시그너처 + mock fetcher만 만들어 UI 작업(B1)과 어댑터 작업(B2-MD)을 디커플링한다. 페이지는 `data/*.ts`만 호출하고, B2-MD에서 mock → 실제 fetch로 함수 본문만 swap.
 
-| ID | Task | 산출물 | Agent | Status | Notes |
-|---|---|---|---|---|---|
-| 0-A | 데이터 모델 + mock fetcher 레이어 | `app/src/data/{types.ts, market.ts, portfolio.ts, geo.ts, security.ts, ai.ts}` | backend-api-data-engineer | ⬜ | 모든 섹션의 단일 진입점. 처음엔 mock, 나중에 real adapter로 교체 가능하게 인터페이스 분리 |
-| 0-B | 페이지 분해 — 한 파일에 몰린 섹션을 컴포넌트 파일로 쪼개기 | `app/src/pages/overview/*.tsx`, `pages/portfolio/*.tsx`, `pages/geo/*.tsx`, `pages/detail/*.tsx` | frontend-ui-integrator | ⬜ | 이걸 안 하면 같은 페이지 섹션을 두 에이전트가 동시에 못 건듦 |
-| 0-C | `lib/format.ts` (가격/퍼센트/통화/시간/timezone) | `app/src/lib/format.ts` | frontend-ui-integrator | ⬜ | 모든 섹션이 공유 |
+### Task 0-A — 데이터 레이어 (타입 + mock)
+
+**Agent:** backend-api-data-engineer · **Status:** ⬜
+
+| Sub-ID | 산출물 | 내용 |
+|---|---|---|
+| 0-A.1 | `app/src/data/types.ts` | 30+ 도메인 타입 (`Quote`, `Index`, `OHLC`, `MacroIndicator`, `SectorReturn`, `Constituent`, `FearGreed`, `CalendarEvent`, `Holding`, `AllocationSlice`, `EquityPoint`, `AIInsight`, `AISignal`, `AIVerdict`, `RiskHotspot`, `RiskMapEntry`, `RiskAlert`, `AffectedHolding`, `SecurityProfile`, `Fundamental`, `Filing`, `AnalystTarget`, `Peer`, `Earnings`, `Range`, `MacroKey` 등) |
+| 0-A.2 | `app/src/data/market.ts` | `getIndices()`, `getIntraday(sym,range)`, `getSPConstituents()`, `getSectorReturns(range)`, `getMacro(keys)`, `getCalendar(date)`, `getFearGreed()`, `getSessionVolume()`, `getSearch(q)` — 모두 mock Promise |
+| 0-A.3 | `app/src/data/portfolio.ts` | `getSummary()`, `getEquityCurve(range)`, `getAllocation(by)`, `getHoldings()`, `getWatchlist(region)`, `getTrades()`, `getRiskFactors()` |
+| 0-A.4 | `app/src/data/geo.ts` | `getRiskMap()`, `getGlobalIndex()`, `getHotspots()`, `getAffected(portfolioId)`, `streamAlerts()` (AsyncIterable) |
+| 0-A.5 | `app/src/data/security.ts` | `getProfile(symbol)`, `getOHLC(symbol,range)`, `getFundamentals(symbol)`, `getFilings(symbol)`, `getTargets(symbol)`, `getPeers(symbol)`, `getEarnings(symbol)`, `getIVSurface(symbol)` |
+| 0-A.6 | `app/src/data/ai.ts` | `streamSignals()`, `streamInsights(portfolioId)`, `proposeHedge(exposure)`, `getVerdict(symbol)` — 모두 AsyncIterable, mock 단계에선 setTimeout으로 toy stream |
+
+Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portfolio/Geo/Detail tsx에 박힌 배열들)을 그대로 끌어올림.
+
+### Task 0-B — 페이지 분해
+
+**Agent:** frontend-ui-integrator · **Status:** ⬜
+
+한 파일에 몰린 섹션을 컴포넌트 파일로 분리 (B1 병렬 작업의 충돌 제거):
+
+| Page | 분해 대상 (file 수) | 디렉토리 |
+|---|---|---|
+| Overview | 11개 (IndicesStrip, Workspaces, Watchlist, HeroChart, SectorHeat, SectorFlow, MacroMonitor, AISignals, Sentiment, TodaysEvents, SessionVolume) | `app/src/pages/overview/` |
+| Portfolio | 5개 (KPIStrip, EquityCurve, Allocation, HoldingsTable, AIInsightsFeed) | `app/src/pages/portfolio/` |
+| GeoRisk | 8개 (WorldMap*, GlobalRiskIndex, LiveAlertCard, LayerToggles, RiskLegend, Hotspots, AffectedPortfolio, AIHedgeSuggestion) | `app/src/pages/geo/` |
+| Detail | 9개 (Header, MainChart, RSIPanel, MACDPanel, ValuationGrid, DisclosuresFeed, AIInvestmentGuide, AnalystTargets, Peers) | `app/src/pages/detail/` |
+
+\* WorldMap 컴포넌트 자체는 `app/src/lib/WorldMap/` (B2-MAP에서 재구현됨).
+
+### Task 0-C — `lib/format.ts`
+
+**Agent:** frontend-ui-integrator · **Status:** ⬜
+
+`formatPrice(value, currency)`, `formatPct(v, signed?)`, `formatBp(v)`, `formatTime(ts, tz)`, `formatVol(n)`, `formatCurrency(v, code)`, `formatRange(range)` — 순수 함수, 단위테스트 동봉.
 
 ---
 
@@ -120,8 +150,11 @@
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
 | B2-MAP | WorldMap 재구현 (TopoJSON + d3-geo, 줌·팬, 레이어, 핀 클릭) | `app/src/lib/WorldMap/*` | frontend-ui-integrator + general-purpose (TopoJSON 출처 조사) | ⬜ | |
-| B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 캐시) | `server/routes/ai/*` (신규 디렉토리, 앱과 분리) | backend-api-data-engineer + claude-api skill | ⬜ | 키 보관 위치, 모델 선택, 스트리밍 형식 결정 필요 |
-| B2-MD | Market data adapter (실제 API 후보 조사 + 어댑터 1개) | `app/src/data/providers/*` | backend-api-data-engineer | ⬜ | 후보: Polygon, Finnhub, Alpha Vantage, Yahoo (무료 한도 비교) |
+| B2-SRV | 로컬 Express 서버 부트스트랩 (포트 3001), Vite `/api` 프록시 설정 | `server/index.ts`, `server/package.json`, `vite.config.ts` 수정 | backend-api-data-engineer | ⬜ | npm workspace로 묶기 vs 별도 디렉토리 결정. 단일 `npm run dev`로 동시 기동 (concurrently) |
+| B2-MD | Market data adapter — `yahoo-finance2` 래퍼 + REST 라우트 + in-memory 캐시 (30~60s) | `server/providers/yahoo.ts`, `server/routes/{market,security,portfolio}.ts`, `app/src/data/*.ts` 본문 swap | backend-api-data-engineer | ⬜ | by B2-SRV. ticker→CIK 매핑은 SEC `company_tickers.json` 1회 캐시 |
+| B2-FRED | FRED 어댑터 (CPI 등 매크로) — 선택. API key 미설정 시 mock 유지 | `server/providers/fred.ts`, `server/routes/macro.ts` | backend-api-data-engineer | ⬜ | by B2-SRV. .env로 키 관리 |
+| B2-SEC | SEC EDGAR 어댑터 (공시 원문 메타데이터) | `server/providers/sec.ts`, `server/routes/security.ts` 확장 | backend-api-data-engineer | ⬜ | by B2-SRV. User-Agent 헤더 필수 |
+| B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 응답 캐시) | `server/routes/ai.ts` | backend-api-data-engineer + claude-api skill | ⬜ | by B2-SRV. ANTHROPIC_API_KEY env, 모델 `claude-opus-4-7` 기본, prompt caching 필수 |
 | B2-TW | Tweaks 확장 (timezone, locale, currency, 컬럼설정 영속화) | `app/src/lib/tweaks.tsx` | frontend-ui-integrator | ⬜ | localStorage 영속화 |
 
 ### 배치 B3 — AI 의존 섹션 (B2-AI 완료 후)
@@ -193,15 +226,36 @@
 ## 6. Current state
 
 - ✅ **Pre-Phase 0** — Vite+React+TS 스캐폴드, 4 페이지 정적 구현(Overview/Portfolio/Geo/Detail), 디자인 토큰, Tweaks 패널, 라우팅, 빌드 검증, GitHub 연결 (commit `1445063`)
+- ✅ **§7 결정 잠금 (5/5)** — 공급자 yahoo-finance2, 호스팅 로컬 Express, 심볼 Yahoo 표기, 시각 회귀 자체 Playwright (commit pending)
 - 👉 **다음**: Phase 0 (0-A → 0-B → 0-C). 사용자 승인 대기 중.
+
+### 데이터 수집 전략 요약
+
+**Phase 0:** mock fetcher만 (실데이터 X). 페이지는 `data/*.ts` 함수만 호출.
+
+**B2-MD (B2 페이즈):** 로컬 Express 서버(`server/`, 포트 3001)가 외부 데이터 소스를 호출하고 통일 JSON으로 프론트에 노출. Vite dev에서 `/api` 프록시.
+
+| 도메인 | 소스 | 키 | 비고 |
+|---|---|---|---|
+| 시세·OHLC·펀더멘털·컨센·어닝·검색 | yahoo-finance2 | 불필요 | 비공식, 어댑터로 격리 |
+| 섹터 | XLK·XLE·XLF·XLV·XLY·XLI·XLP·XLB·XLU·XLRE·XLC ETF | 불필요 | yahoo로 시세 fetch 후 derive |
+| 인덱스 (KOSPI/KOSDAQ 포함) | yahoo (`^GSPC`, `^IXIC`, `^DJI`, `^KS11`, `^KQ11`, `^VIX`, `^TNX`, ...) | 불필요 | |
+| FX·원자재 | yahoo (`KRW=X`, `CL=F`) | 불필요 | |
+| CPI 등 매크로 | FRED API | 무료 키 | 키 없으면 mock 유지 |
+| 공시 (SEC filings) | SEC EDGAR | 불필요 (User-Agent 필수) | ticker→CIK 매핑 1회 캐시 |
+| Fear & Greed | mock | — | CNN 공식 API 없음 |
+| 지정학 / 알림 | mock | — | NewsAPI는 B5에서 검토 |
+| AI (시그널·베르딕트·헷지) | Claude API (`claude-opus-4-7`) via 로컬 프록시 | ANTHROPIC_API_KEY | prompt caching 필수 |
 
 ---
 
-## 7. Open questions / decisions needed
+## 7. Locked decisions
 
-- [ ] Workspaces 좌측 nav: 상단 nav와 중복 → 제거 vs 즐겨찾기 패널로 전환?
-- [ ] Market data 공급자 (Polygon vs Finnhub vs Alpha Vantage vs Yahoo unofficial) — 무료 한도 비교 후 결정
-- [ ] AI 백엔드 호스팅 (Vercel functions vs 별도 Node 서버 vs Cloudflare Workers)
-- [ ] 인증 도입 시점 (B5는 선택이지만, 포트폴리오 멀티 디바이스 동기화 필요 여부)
-- [ ] Detail 라우트의 `:symbol` 형식 — `NVDA` vs `XNAS:NVDA` (거래소 prefix 포함 여부)
-- [ ] 시각 회귀: 외부 SaaS(Percy) vs 자체 Playwright snapshot
+| # | Decision | Locked value | Date |
+|---|---|---|---|
+| 1 | Workspaces 좌측 nav | **유지 (그대로 사용)** | 2026-04-28 |
+| 2 | Market data 공급자 | **`yahoo-finance2`** (Node 패키지, 키·시그업 불필요). 미커버는 FRED(CPI)·SEC EDGAR(공시)로 보조. F&G·지정학은 mock 유지 | 2026-04-28 |
+| 3 | 백엔드 호스팅 | **로컬 MacBook** — `server/` (Node + Express, 포트 3001). Vite `/api` 프록시로 연결 | 2026-04-28 |
+| 4 | Detail 심볼 형식 | **Yahoo 표기 = 사실상의 web 공용** — US `NVDA`, KOSPI `005930.KS`, KOSDAQ `247540.KQ` | 2026-04-28 |
+| 5 | 시각 회귀 | **자체 Playwright snapshot** (`toHaveScreenshot`) | 2026-04-28 |
+| 6 (open) | 인증 도입 시점 | 미정 — B5는 선택. 멀티 디바이스 동기화 필요해질 때 재논의 | — |
