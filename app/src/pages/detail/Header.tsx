@@ -1,4 +1,37 @@
-export function Header() {
+import { getProfile } from '../../data/security';
+import { useAsync } from '../../lib/useAsync';
+
+interface HeaderProps {
+  symbol: string;
+}
+
+/**
+ * Detail page header — stock identity, live price, AI verdict tag, action chips.
+ *
+ * Data:
+ *  - `getProfile(symbol)` for name / sector / indices / price / day change.
+ *  - AI verdict + risk tag are still placeholder; B3-DT-AI will wire them to
+ *    `ai.getVerdict(symbol)` (lives in `AIInvestmentGuide.tsx` for now).
+ *
+ * Action chips (+ WATCHLIST / ⤴ TRADE) are UI-only — B5 will hook them up.
+ */
+export function Header({ symbol }: HeaderProps) {
+  const { data: profile, loading } = useAsync(() => getProfile(symbol), [symbol]);
+
+  // Split decimal portion so we can dim it like the prototype: "$924.<19>".
+  // Use the formatted string from the data layer (it already carries currency
+  // glyphs / locale-aware grouping). Fallbacks preserve the dimmed look while
+  // loading.
+  const [pricePre, priceDec] = (() => {
+    const raw = profile?.priceFormatted ?? '$—.—';
+    const dot = raw.lastIndexOf('.');
+    if (dot < 0) return [raw, ''];
+    return [raw.slice(0, dot + 1), raw.slice(dot + 1)];
+  })();
+
+  const dimmed = loading && !profile ? { opacity: 0.5 } : undefined;
+  const isUp = (profile?.dayChangePct ?? '').trim().startsWith('+');
+
   return (
     <div
       style={{
@@ -9,8 +42,9 @@ export function Header() {
         gap: 18,
         alignItems: 'center',
       }}
+      aria-busy={loading}
     >
-      <div>
+      <div style={dimmed}>
         <div className="row gap-3 center">
           <div
             className="wf-dashed"
@@ -33,28 +67,31 @@ export function Header() {
                 className="wf-h"
                 style={{ fontSize: 22, margin: 0, fontWeight: 400 }}
               >
-                NVIDIA Corp
+                {profile?.name ?? '———'}
               </h2>
-              <span className="tag">NVDA</span>
-              <span className="tag">SEMIS</span>
-              <span className="tag">US</span>
+              <span className="ticker">{profile?.symbol ?? symbol}</span>
+              {profile && <span className="tag">{profile.sector}</span>}
+              {profile && <span className="tag">{profile.exchange}</span>}
             </div>
-            <div
-              className="muted wf-mini"
-              style={{ marginTop: 4 }}
-            >
-              S&amp;P 500 · Nasdaq 100 · MSCI World
+            <div className="muted wf-mini" style={{ marginTop: 4 }}>
+              {profile?.indices || ' '}
             </div>
           </div>
         </div>
       </div>
       <div className="row gap-5 center">
-        <div>
+        <div style={dimmed}>
           <div className="wf-num" style={{ fontSize: 30 }}>
-            $924.<span className="muted">19</span>
+            {pricePre}
+            <span className="muted">{priceDec}</span>
           </div>
-          <div className="wf-mono up" style={{ fontSize: 12 }}>
-            +$28.41 (+3.17%) · DAY
+          <div
+            className={`wf-mono ${isUp ? 'up' : 'down'}`}
+            style={{ fontSize: 12 }}
+          >
+            {profile
+              ? `${profile.dayChange} (${profile.dayChangePct}) · DAY`
+              : '— · DAY'}
           </div>
         </div>
         <div className="wf-divider-v" />
@@ -76,8 +113,28 @@ export function Header() {
           </div>
         </div>
         <div className="row gap-2">
-          <span className="tag">+ WATCHLIST</span>
-          <span className="tag">⤴ TRADE</span>
+          <button
+            type="button"
+            className="tag"
+            style={{
+              background: 'transparent',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            + WATCHLIST
+          </button>
+          <button
+            type="button"
+            className="tag"
+            style={{
+              background: 'transparent',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            ⤴ TRADE
+          </button>
         </div>
       </div>
     </div>

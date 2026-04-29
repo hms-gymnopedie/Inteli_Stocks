@@ -8,10 +8,15 @@ import { Peers } from './Peers';
 import { RSIPanel } from './RSIPanel';
 import { ValuationGrid } from './ValuationGrid';
 
+// Phase 1: hardcoded Detail symbol. B4-RT will replace this with a route param
+// (`/detail/:symbol`) and a ⌘K symbol search. Until then, every section reads
+// the same constant so swapping symbols is a one-line edit.
+const SYMBOL = 'NVDA';
+
 export function Detail() {
   return (
     <div className="app-frame" style={{ fontSize: 12 }}>
-      <Header />
+      <Header symbol={SYMBOL} />
 
       <div
         style={{
