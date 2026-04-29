@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-04-28 (Phase 1 부분 완료 — rate-limit으로 5에이전트 중도 종료, 메인이 정리)
+**Last updated:** 2026-04-29 (Phase 1 완료 — 7/7 모두 ✅)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -230,20 +230,21 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 - ✅ **Pre-Phase 0** — Vite+React+TS 스캐폴드 (commit `1445063`)
 - ✅ **§7 결정 잠금 (5/5)** (commit `f3773f3`)
 - ✅ **Phase 0 완료 (3/3)** — 0-A `316f97f` · 0-B `01dc917` · 0-C `ac08ef6`
-- 🟡 **Phase 1 부분 완료** — 7개 동시 실행 → 2025-04-28 23:40 ET **글로벌 rate limit**으로 5개 에이전트 중도 종료. 메인이 정리:
-  - ✅ B2-SRV (`60b7e49`) — 메인이 마무리 커밋
-  - ✅ B2-TW (`c379441`)
-  - ✅ B1-PF (`0f02f7b` — B1-OV 커밋과 묶임)
-  - 🟡 B1-OV (7/9) — IndicesStrip · Watchlist 미완
-  - 🟡 B1-GE (3/5) — LayerToggles · AffectedPortfolio 미완
-  - ⬜ B1-DT — 빌드 깨진 미커밋분 롤백, 재실행 필요
-  - ⬜ B2-MAP — deps 미설치 + 타입 미동기화로 롤백, 재실행 필요
-- 👉 **다음 (limit 풀린 뒤)**: 4개 task 재실행 — B1-OV 잔여 2섹션, B1-GE 잔여 2섹션, B1-DT 전체, B2-MAP 전체. 그 다음 B2-MD/FRED/SEC/AI(B2-SRV blocked-by 풀림).
+- ✅ **Phase 1 완료 (7/7)** — 두 라운드에 걸쳐 모두 완료:
+  - B1-OV ✅ 9/9 · B1-PF ✅ 4/4 · B1-DT ✅ 7/7 · B1-GE ✅ 5/5
+  - B2-MAP ✅ TopoJSON · B2-SRV ✅ Express + Vite 프록시 · B2-TW ✅ 영속화
+  - Bonus: `pages/geo/WorldMap.tsx` → `getRiskMap` 와이어링 (메인 마무리, `adb6566`)
+  - 빌드: 215 modules, 373.17 KB JS / 124.59 KB gz, `tsc -b && vite build` 통과
+  - 라운드 1 (4/28 23:40 ET): rate-limit으로 5에이전트 중도 종료 → B1-DT/B2-MAP 롤백
+  - 라운드 2 (4/29): 4 재실행 모두 성공
+- 👉 **다음 (Phase 2)**: B2-SRV 풀림 → **B2-MD / B2-FRED / B2-SEC / B2-AI** 4개 동시 실행 가능. 모두 `server/routes/*` + `app/src/data/*.ts` 본문 fetch swap.
+- 또한: **B3** (AISignals/Sentiment/AIInsightsFeed/AIHedge/LiveAlerts/AIInvestmentGuide/Disclosures) 4건은 B2-AI 완료 후 시작.
 
 ### Lessons from Phase 1
-- **에이전트가 글로벌 rate limit에 걸리면 마지막 커밋/푸시 단계에서 일부만 끝나는 경우가 있음** — 다음 라운드부터는 commit-per-section을 더 자주, push도 자주 하도록 prompt 강화.
-- **두 에이전트가 동일 워킹 트리에서 commit 시 staging이 섞일 수 있음** — `git pull --rebase` 도중 다른 에이전트의 unstaged 파일이 자동 stash되는 경우 별도 처리 가이드 필요. (B1-OV 커밋에 B1-PF 변경분이 함께 들어간 사례)
-- **B2-MAP는 패키지 설치 + 타입 변경이 같이 일어남** — 다음엔 deps 설치를 별도 prep 단계로 분리.
+- **글로벌 rate limit이 에이전트를 마지막 push 전에 끊을 수 있음** — round 2부터 섹션별 즉시 commit·push로 진행분 손실 최소화. 효과 있었음.
+- **동일 working tree 공유 시 staging-bleed 빈번** — `git add <specific files>` 만으로도 100% 막지 못함. 한 에이전트의 staged 파일이 다른 에이전트의 commit에 묻혀 들어가는 사례가 두 라운드 모두 발생. 다행히 모두 owned 파일끼리의 cross-merge라 결과는 main에 정확히 반영됨. 다음 페이즈는 **`git worktree add`로 에이전트별 독립 워크트리** 권장 (B2-MAP 에이전트 제안).
+- **deps + 타입 + 컴포넌트 변경을 한 commit에 묶으면 위험** — round 2 B2-MAP는 4단계 분할 commit으로 안전. Phase 2도 같은 패턴 권장.
+- 부분 완료된 미커밋 변경은 빌드 검증 후 폐기 vs 보존 결정 — round 1에서 깨진 B1-DT/B2-MAP는 폐기가 정답이었음.
 
 ### 데이터 수집 전략 요약
 
