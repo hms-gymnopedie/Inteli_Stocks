@@ -1,4 +1,4 @@
-import { getWatchlist } from '../../data/market';
+import { getWatchlist } from '../../data/portfolio';
 import type { WatchlistEntry } from '../../data/types';
 import { Spark } from '../../lib/primitives';
 import { useAsync } from '../../lib/useAsync';
