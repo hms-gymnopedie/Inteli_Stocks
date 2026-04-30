@@ -161,19 +161,19 @@ security.get('/:symbol/profile', async (req: Request, res: Response) => {
       currency:      q?.currency ?? 'USD',
     });
   } catch (err) {
-    console.error('[security/profile]', symbol, err);
-    // Fallback: return minimal profile so UI doesn't break
+    console.error(`[B2-MD2] /profile fallback triggered for ${symbol}:`, (err as Error).message);
+    // Fallback: return minimal profile so UI doesn't break (any symbol)
     res.json({
       symbol,
-      name:          symbol === 'NVDA' ? 'NVIDIA Corp' : symbol,
-      sector:        symbol === 'NVDA' ? 'SEMIS' : 'N/A',
-      exchange:      symbol === 'NVDA' ? 'NASDAQ' : 'N/A',
-      indices:       '',
-      price:         symbol === 'NVDA' ? 924.19 : 0,
-      priceFormatted: symbol === 'NVDA' ? '$924.19' : '—',
-      dayChange:     '—',
-      dayChangePct:  '—',
-      currency:      'USD',
+      name:           symbol,
+      sector:         '—',
+      exchange:       '—',
+      indices:        '',
+      price:          0,
+      priceFormatted: '—',
+      dayChange:      '—',
+      dayChangePct:   '—',
+      currency:       'USD',
     });
   }
 });
@@ -254,24 +254,22 @@ security.get('/:symbol/fundamentals', async (req: Request, res: Response) => {
 
     res.json(fundamentals);
   } catch (err) {
-    console.error('[security/fundamentals]', symbol, err);
-    // Fallback: return minimal mock so UI renders
-    if (symbol === 'NVDA') {
-      res.json([
-        { label: 'MKT CAP',    value: '$2.31T'               },
-        { label: 'P/E (TTM)',  value: '74.1',  note: 'sector 28.4' },
-        { label: 'P/S',        value: '36.2'                 },
-        { label: 'REV YoY',   value: '+265%',  note: 'up'    },
-        { label: 'NET MARGIN', value: '54.2%'                },
-        { label: 'DIV YIELD',  value: '0.02%'                },
-        { label: '52W RANGE',  value: '$280 — $974'          },
-        { label: 'BETA',       value: '1.74'                 },
-        { label: 'SHORT RATIO', value: '1.20%'               },
-        { label: 'EPS (TTM)',  value: '$11.93'               },
-      ]);
-    } else {
-      res.json([]);
-    }
+    console.error(`[B2-MD2] /fundamentals fallback triggered for ${symbol}:`, (err as Error).message);
+    // Fallback: return 12-metric "—" structure so ValuationGrid always renders
+    res.json([
+      { label: 'MKT CAP',     value: '—' },
+      { label: 'P/E (TTM)',   value: '—' },
+      { label: 'P/B',         value: '—' },
+      { label: 'P/S',         value: '—' },
+      { label: 'DIV YIELD',   value: '—' },
+      { label: 'BETA',        value: '—' },
+      { label: 'SHORT RATIO', value: '—' },
+      { label: 'EPS (TTM)',   value: '—' },
+      { label: 'GROSS MARGIN', value: '—' },
+      { label: 'NET MARGIN',  value: '—' },
+      { label: 'DEBT/EQ',     value: '—' },
+      { label: '52W RANGE',   value: '—' },
+    ]);
   }
 });
 
@@ -305,12 +303,9 @@ security.get('/:symbol/targets', async (req: Request, res: Response) => {
       currency: 'USD',
     });
   } catch (err) {
-    console.error('[security/targets]', symbol, err);
-    if (symbol === 'NVDA') {
-      res.json({ low: 720, consensus: 1040, high: 1200, buys: 38, holds: 7, sells: 1, currency: 'USD' });
-    } else {
-      res.json(null);
-    }
+    console.error(`[B2-MD2] /targets fallback triggered for ${symbol}:`, (err as Error).message);
+    // null is valid — AnalystTargets panel handles gracefully
+    res.json(null);
   }
 });
 
@@ -339,8 +334,8 @@ security.get('/:symbol/peers', async (req: Request, res: Response) => {
     }));
     res.json(peers);
   } catch (err) {
-    console.error('[security/peers]', symbol, err);
-    // Fallback: static mock peers for known symbols
+    console.error(`[B2-MD2] /peers fallback triggered for ${symbol}:`, (err as Error).message);
+    // Fallback: static mock peers for known symbols; generic empty array for others
     const MOCK_PEERS: Record<string, Array<{ symbol: string; price: string; change: string; direction: 1 | -1; seed: number }>> = {
       NVDA: [
         { symbol: 'AMD',  price: '$162.4', change: '+1.84%', direction:  1, seed: 31 },
@@ -396,18 +391,9 @@ security.get('/:symbol/earnings', async (req: Request, res: Response) => {
 
     res.json(history);
   } catch (err) {
-    console.error('[security/earnings]', symbol, err);
-    if (symbol === 'NVDA') {
-      res.json([
-        { quarter: 'Q4 FY24', epsActual: 5.16, epsEstimate: 4.84,  revenueActual: 22_100, revenueEstimate: 20_420 },
-        { quarter: 'Q3 FY24', epsActual: 4.02, epsEstimate: 3.65,  revenueActual: 18_120, revenueEstimate: 16_090 },
-        { quarter: 'Q2 FY24', epsActual: 2.70, epsEstimate: 2.04,  revenueActual: 13_510, revenueEstimate: 11_040 },
-        { quarter: 'Q1 FY24', epsActual: 1.09, epsEstimate: 0.92,  revenueActual:  7_190, revenueEstimate:  6_520 },
-        { quarter: 'Q1 FY25', epsActual: null, epsEstimate: 5.55,  revenueActual: null,   revenueEstimate: 24_600 },
-      ]);
-    } else {
-      res.json([]);
-    }
+    console.error(`[B2-MD2] /earnings fallback triggered for ${symbol}:`, (err as Error).message);
+    // Fallback: empty array is valid — earnings panel handles gracefully
+    res.json([]);
   }
 });
 
@@ -444,7 +430,7 @@ security.get('/:symbol/iv-surface', async (req: Request, res: Response) => {
 
     res.json(points);
   } catch (err) {
-    console.error('[security/iv-surface]', symbol, err);
+    console.error(`[B2-MD2] /iv-surface fallback triggered for ${symbol}:`, (err as Error).message);
     // Still generate synthetic surface from a default price
     const points: Array<{ expiry: string; strike: number; iv: number }> = [];
     const expiries = [
