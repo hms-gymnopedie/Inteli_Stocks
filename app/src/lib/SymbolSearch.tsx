@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSearch } from '../data/market';
 import type { SearchResult } from '../data/types';
+import { useFocusTrap } from './useFocusTrap';
 
 const DEBOUNCE_MS = 200;
 const MAX_RESULTS = 8;
@@ -26,7 +27,12 @@ export function SymbolSearch() {
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
+
+  // Trap Tab/Shift+Tab inside the dialog while open. Esc is handled below
+  // (window listener + onInputKeyDown). Focus restore on close is automatic.
+  useFocusTrap(dialogRef, open);
 
   // Global ⌘K / Ctrl+K toggle — always live (regardless of `open`) so the
   // shortcut works from any page. preventDefault stops the browser's
@@ -156,6 +162,7 @@ export function SymbolSearch() {
       role="presentation"
     >
       <div
+        ref={dialogRef}
         className="symsearch"
         role="dialog"
         aria-modal="true"
