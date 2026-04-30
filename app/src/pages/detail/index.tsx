@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { AIInvestmentGuide } from './AIInvestmentGuide';
 import { AnalystTargets } from './AnalystTargets';
 import { DisclosuresFeed } from './DisclosuresFeed';
+import { EarningsGuidance } from './EarningsGuidance';
 import { Header } from './Header';
 import { MACDPanel } from './MACDPanel';
 import { MainChart, type StudyKey } from './MainChart';
@@ -91,6 +92,8 @@ export function Detail() {
           </div>
 
           <DisclosuresFeed />
+
+          <EarningsGuidance symbol={SYMBOL} />
         </main>
 
         <aside
