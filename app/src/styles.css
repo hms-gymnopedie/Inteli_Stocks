@@ -1020,3 +1020,255 @@ body {
   75%  { content: '...'; }
   100% { content: ''; }
 }
+
+/* ============================================================
+   RESPONSIVE (B4-RS)
+   Owner: B4-RS. All @media queries below this banner. Do not
+   edit existing rules above — append only.
+
+   Breakpoints:
+     <= 1100px  tablet-wide   side rails collapse / shrink
+     <=  900px  tablet        page rails stack below main
+     <=  720px  small tablet  topbar nav collapses to hamburger
+     <=  600px  mobile        single-column, KPI 2-col / Valuation 3-col
+     <=  430px  small mobile  KPI 1-col / Valuation 2-col
+   ============================================================ */
+
+/* ---------- topbar hamburger (always present, only visible on small) ---------- */
+
+.nav-toggle {
+  display: none; /* shown by media query below */
+  background: var(--panel-2);
+  border: 1px solid var(--hairline);
+  color: var(--fg);
+  border-radius: 6px;
+  width: 30px;
+  height: 28px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.nav-toggle:hover {
+  border-color: var(--orange);
+  color: var(--fg);
+}
+
+/* ============================================================
+   <= 1100px — tablet-wide: keep existing side-rail collapse, but
+   make the topbar still scroll horizontally if needed instead of
+   wrapping into a broken second row.
+   ============================================================ */
+@media (max-width: 1100px) {
+  /* legacy `.responsive-side` rule above already hides Overview side rails. */
+
+  /* Portfolio: shrink the AI insight rail rather than hiding it. */
+  .pf-grid { grid-template-columns: 1fr 320px !important; }
+
+  /* Detail right rail shrinks. */
+  .dt-grid { grid-template-columns: 1fr 280px !important; }
+
+  /* Geo right rail shrinks. */
+  .geo-grid { grid-template-columns: 1fr 280px !important; }
+}
+
+/* ============================================================
+   <= 900px — tablet: stack page-level grids vertically.
+   ============================================================ */
+@media (max-width: 900px) {
+  /* Topbar density */
+  .topbar { gap: 10px; padding: 0 12px; }
+  .topbar-right { gap: 10px; }
+
+  /* Overview: drop side rails entirely (handled by .responsive-side
+     above) and let main fill the row. */
+  .ov-grid { grid-template-columns: 1fr !important; }
+
+  /* Portfolio: stack AI insight feed BELOW main content. */
+  .pf-grid {
+    grid-template-columns: 1fr !important;
+    grid-auto-rows: min-content;
+  }
+  .pf-aside {
+    border-left: 0 !important;
+    border-top: 1px solid var(--hairline);
+    max-height: none !important;
+  }
+
+  /* Detail: stack right rail below. */
+  .dt-grid { grid-template-columns: 1fr !important; }
+  .dt-aside {
+    border-left: 0 !important;
+    border-top: 1px solid var(--hairline);
+  }
+
+  /* Geo: stack right rail below the map. */
+  .geo-grid { grid-template-columns: 1fr !important; }
+  .geo-aside {
+    border-top: 1px solid var(--hairline);
+  }
+
+  /* Detail equity curve + allocation row: stack. */
+  .pf-charts-row { grid-template-columns: 1fr !important; }
+
+  /* Overview Sector heat / flow row: stack. */
+  .ov-sector-row { grid-template-columns: 1fr !important; }
+
+  /* Valuation grid 6 -> 3 cols. */
+  .dt-valuation-grid { grid-template-columns: repeat(3, 1fr) !important; }
+
+  /* KPI strip 4 -> 2 cols. */
+  .pf-kpi-strip { grid-template-columns: 1fr 1fr !important; }
+
+  /* Detail header: let the price/verdict row wrap. */
+  .dt-header {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .dt-header-actions {
+    flex-wrap: wrap !important;
+    gap: 14px !important;
+  }
+}
+
+/* ============================================================
+   <= 720px — small tablet: topbar nav collapses to hamburger,
+   FetchIndicator label hides to keep the bar one row.
+   ============================================================ */
+@media (max-width: 720px) {
+  .nav-toggle { display: inline-flex; }
+
+  /* Inline nav collapses; reveal as a dropdown when .is-open. */
+  .topbar .nav {
+    display: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 6px 8px;
+    gap: 0;
+    background: var(--panel);
+    border-bottom: 1px solid var(--hairline);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    z-index: 9;
+  }
+  .topbar .nav.is-open { display: flex; }
+  .topbar .nav a {
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .topbar .nav a.active { background: var(--panel-3); }
+
+  /* Tighten the right-side cluster — the indicator's "LAST" pill text
+     can elide; the dot still pulses. */
+  .fetch-indicator-label { display: none; }
+  .refresh-btn-label { display: none; }
+  .refresh-btn { padding: 4px 9px; }
+
+  /* Geo titlebar chips wrap onto a second row instead of overflowing. */
+  .geo-titlebar-chips {
+    flex-wrap: wrap !important;
+    row-gap: 6px !important;
+  }
+
+  /* Tweaks FAB shrinks so it doesn't cover important content. */
+  .tweaks-fab {
+    right: 12px;
+    bottom: 12px;
+    padding: 7px 12px;
+    font-size: 10px;
+  }
+  .tweaks-panel {
+    right: 8px;
+    left: 8px;
+    bottom: 56px;
+    width: auto;
+  }
+}
+
+/* ============================================================
+   <= 600px — mobile: single-column everywhere, KPI 2-col,
+   Valuation 2-col, Holdings table scrolls inside its panel.
+   ============================================================ */
+@media (max-width: 600px) {
+  body { font-size: 12px; }
+
+  /* Topbar still sticky so user keeps nav while scrolling. */
+  .topbar {
+    position: sticky;
+    top: 0;
+    height: auto;
+    min-height: 44px;
+    padding: 6px 10px;
+  }
+  .topbar .brand { font-size: 10px; gap: 6px; }
+  .topbar-right { gap: 6px; }
+  .live-clock { display: none; } /* fall back to system clock */
+
+  /* Page paddings tighten. */
+  .ov-main, .pf-main, .dt-main { padding: 10px !important; gap: 10px !important; }
+  .pf-aside, .dt-aside { padding: 10px !important; }
+
+  /* KPI strip 2 -> still 2 (NAV column gets full row above). */
+  .pf-kpi-strip {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+    padding: 12px !important;
+  }
+  .pf-kpi-nav {
+    grid-column: 1 / -1; /* NAV block spans both columns on mobile */
+  }
+
+  /* Valuation grid 3 -> 2 cols on mobile. */
+  .dt-valuation-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+  /* Holdings table: let the inner grid stay dense, scroll horizontally. */
+  .pf-holdings-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .pf-holdings-scroll > .dense-row {
+    min-width: 720px;
+  }
+
+  /* Geo absolute overlays on the map — keep within the map and shrink. */
+  .geo-overlays {
+    position: static !important;
+    width: auto !important;
+    padding: 10px !important;
+    border-top: 1px solid var(--hairline);
+  }
+
+  /* Detail header: action buttons wrap, divider collapses. */
+  .dt-header-actions .wf-divider-v { display: none; }
+  .dt-price-block { font-size: 22px !important; }
+
+  /* Settings: reduce padding. */
+  .settings-page { padding: 16px 12px 80px; }
+}
+
+/* ============================================================
+   <= 430px — small mobile: even tighter density.
+   ============================================================ */
+@media (max-width: 430px) {
+  /* KPI strip stacks fully. */
+  .pf-kpi-strip { grid-template-columns: 1fr !important; }
+  .pf-kpi-nav { grid-column: 1 / -1; }
+
+  /* Valuation 2 cols already; keep. */
+
+  /* Detail header: hide the LOGO box to give the title room. */
+  .dt-header-logo { display: none !important; }
+
+  /* Topbar: brand text hides, only the dot remains as the home cue. */
+  .topbar .brand span:not(.brand-dot) { display: none; }
+}
+
+/* === END RESPONSIVE === */
+

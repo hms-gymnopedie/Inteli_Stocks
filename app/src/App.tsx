@@ -1,4 +1,5 @@
-import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { FetchIndicator, LiveClock, RefreshButton } from './lib/FetchIndicator';
 import { SymbolSearch } from './lib/SymbolSearch';
 import { TweaksPanel, TweaksProvider } from './lib/tweaks';
@@ -17,18 +18,67 @@ const NAV = [
 ];
 
 function TopBar() {
+  // Mobile hamburger state — collapses the inline nav links into a dropdown
+  // below the bar at narrow widths. CSS (`.nav-toggle`, `.nav.is-open`) drives
+  // the actual show/hide via media queries; this local state just toggles the
+  // class so we don't rely on JS-side viewport detection.
+  const [navOpen, setNavOpen] = useState(false);
+  const location = useLocation();
+  const navRef = useRef<HTMLElement | null>(null);
+
+  // Close the dropdown on route change so tapping a nav link doesn't leave the
+  // overlay sticky.
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
+  // Close on Escape and on outside click for keyboard / pointer parity.
+  useEffect(() => {
+    if (!navOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    const handleClick = (e: MouseEvent) => {
+      if (!navRef.current) return;
+      if (!navRef.current.contains(e.target as Node)) setNavOpen(false);
+    };
+    window.addEventListener('keydown', handleKey);
+    window.addEventListener('mousedown', handleClick);
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      window.removeEventListener('mousedown', handleClick);
+    };
+  }, [navOpen]);
+
   return (
     <header className="topbar">
       <div className="brand">
         <span className="brand-dot" />
         <span>InteliStock</span>
       </div>
-      <nav className="nav">
+
+      <button
+        type="button"
+        className="nav-toggle"
+        aria-label={navOpen ? 'Close navigation' : 'Open navigation'}
+        aria-expanded={navOpen}
+        aria-controls="primary-nav"
+        onClick={() => setNavOpen((v) => !v)}
+      >
+        {navOpen ? '✕' : '≡'}
+      </button>
+
+      <nav
+        id="primary-nav"
+        className={navOpen ? 'nav is-open' : 'nav'}
+        ref={navRef}
+      >
         {NAV.map((n) => (
           <NavLink
             key={n.to}
             to={n.to}
             className={({ isActive }) => (isActive ? 'active' : '')}
+            onClick={() => setNavOpen(false)}
           >
             {n.label}
           </NavLink>
