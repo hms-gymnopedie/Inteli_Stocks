@@ -50,7 +50,13 @@ export function App() {
             <Route path="/overview" element={<Overview />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/geo" element={<GeoRisk />} />
+            {/*
+             * `/detail` and `/detail/:symbol` both land on Detail. The page
+             * reads useParams() and falls back to a default when the param
+             * is absent, so the bare `/detail` URL still works.
+             */}
             <Route path="/detail" element={<Detail />} />
+            <Route path="/detail/:symbol" element={<Detail />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         </main>
