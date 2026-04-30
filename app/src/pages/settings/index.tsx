@@ -271,7 +271,7 @@ function OtherTweaksSection() {
   }
 
   return (
-    <section className="settings-section">
+    <section className="settings-section settings-section--wide">
       <h2 className="settings-section-h">Display Tweaks</h2>
       <p className="settings-section-desc">
         These mirror the corner Tweaks panel — adjust here for a roomier view.

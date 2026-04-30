@@ -230,6 +230,12 @@ body {
   gap: 12px;
 }
 
+/* Wide section spans both grid columns — used by Display Tweaks so its rows
+   have room for all radio buttons on a single line. */
+.settings-section--wide {
+  grid-column: 1 / -1;
+}
+
 .settings-section-h {
   font-family: var(--font-mono);
   font-size: 11px;
@@ -409,9 +415,9 @@ body {
 /* Tweak rows */
 
 .settings-tw-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 110px 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 4px 0;
 }
@@ -422,6 +428,19 @@ body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--fg-2);
+  white-space: nowrap;
+}
+
+/* Radio row inside a tweak row never wraps — keeps each setting on one line.
+   Buttons can shrink minimally if the panel narrows further. */
+.settings-tw-row .settings-radio-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.settings-tw-row .settings-radio {
+  flex-shrink: 0;
 }
 
 @media (max-width: 880px) {

@@ -55,21 +55,25 @@ export function FetchIndicator() {
   let label: string;
 
   if (pending > 0) {
+    // Currently making N network calls — pulsing orange.
     state = 'loading';
     dotColor = 'var(--orange)';
-    label = `${pending}↓`;
+    label = `Fetching ${pending}`;
   } else if (errorRecent) {
+    // The most recent activity (within the last 5 s) was an error.
     state = 'err';
     dotColor = 'var(--down)';
-    label = `${errors} err`;
+    label = errors === 1 ? `Error` : `Errors ${errors}`;
   } else if (successAge != null) {
+    // No requests in flight; we have at least one prior success → live & idle.
     state = 'live';
     dotColor = 'var(--up)';
-    label = `${completed}↓`;
+    label = `Live · ${completed} ok`;
   } else {
+    // No activity yet (right after page load before the first fetch lands).
     state = 'idle';
     dotColor = 'var(--fg-4)';
-    label = '—';
+    label = 'Waiting';
   }
 
   // Tooltip — last activity summary.
