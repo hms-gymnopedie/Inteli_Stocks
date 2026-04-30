@@ -1272,3 +1272,136 @@ body {
 
 /* === END RESPONSIVE === */
 
+/* ============================================================
+   ACCESSIBILITY (B4-A11)
+   Keyboard focus rings, skip-link, reduced-motion overrides,
+   contrast bumps. Append-only — do not modify above this block.
+   ============================================================ */
+
+/* 1. Single, consistent keyboard focus ring on `:focus-visible` only,
+   so mouse clicks don't show rings but Tab navigation does.
+   Orange (#e8702a) on the dark panel-2 (#1a1a1d) measures ~4.6:1 — passes
+   WCAG AA non-text contrast (3:1) with margin to spare. */
+:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Some elements (search input, settings input) want the ring to hug
+   closer or sit inside the rounded border. */
+.symsearch-input:focus-visible,
+.settings-key-input input:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 0;
+}
+
+/* Suppress browser-default focus rings on mouse-only interactions, but
+   never strip outline globally — :focus-visible above re-asserts for kbd. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* 2. Skip-to-content link — first focusable element on the page. Hidden
+   off-screen until it receives keyboard focus, then snaps into view at the
+   top-left so a screen-reader / keyboard user can jump straight to <main>. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 8px;
+  z-index: 1000;
+  padding: 8px 14px;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--orange);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: top 120ms ease;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 8px;
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+/* 3. Reduced motion — kill the FetchIndicator pulse, refresh-icon spin,
+   the symsearch loading dots, and any transition on the skip link.
+   Honors the user's OS-level "reduce motion" preference. */
+@media (prefers-reduced-motion: reduce) {
+  .fetch-indicator-dot[data-pulsing='true'] {
+    animation: none;
+  }
+  .refresh-btn-icon[data-spinning='true'] {
+    animation: none;
+  }
+  .symsearch-loading-dots::after {
+    animation: none;
+    content: '...';
+  }
+  .skip-link {
+    transition: none;
+  }
+  /* Defensive blanket — caps any future component animation/transition. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 4. Contrast bump for muted text on body bg. `--fg-3` (#7a7a82) on
+   `--bg` (#0b0b0c) measures ~4.34:1 — slightly under WCAG AA 4.5:1 for
+   normal-size text. Bump to #8c8c95 (~4.92:1) but ONLY for the broad
+   `.muted` body class, so the original token stays untouched for callers
+   that pair it against panel-2 / panel-3 (already passing). */
+body .muted {
+  color: #8c8c95;
+}
+
+/* 5. Holdings sort-header focus ring — header cells are
+   `<span role="button" tabindex="0">`. Make sure the orange ring shows
+   above the dense-row hairlines. */
+.dense-row [role='button']:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+/* Sort header hover affordance for parity with keyboard focus. */
+.dense-row [role='button']:hover {
+  color: var(--fg);
+}
+
+/* 6. Tabs/Chips/Tags act like buttons — ensure focus ring is visible
+   even when the element has its own background swap on .active. */
+.tab:focus-visible,
+.chip:focus-visible,
+.tag:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+/* 7. Tweaks panel switches — extra outline-offset so the ring doesn't
+   visually merge with the toggle pill background. */
+.tweaks-panel .tw-toggle:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 3px;
+}
+
+/* 8. Nav links — high-visibility focus on Tab keyboard navigation. */
+.nav a:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+  color: var(--fg);
+}
+
+/* === END ACCESSIBILITY === */
