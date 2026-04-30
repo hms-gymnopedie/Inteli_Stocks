@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:visual": "playwright test visual",
+    "test:visual:update": "playwright test visual --update-snapshots"
   },
   "dependencies": {
     "d3-geo": "^3.1.1",

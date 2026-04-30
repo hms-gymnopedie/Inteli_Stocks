@@ -178,7 +178,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | B4-A11 | 접근성 (포커스 링, ARIA, 키보드 nav, 색대비) | 각 컴포넌트 | frontend-ui-integrator | ✅ | 6 commits (`2e08312`·`bdc8812`·`ac876b0`·`fc32737`·`d57161c`·`f280cfb`): styles.css A11 section (`:focus-visible` orange ring, `.skip-link`, `prefers-reduced-motion` overrides, body `.muted` bumped to #8c8c95 for AA 4.5:1 on body bg); App.tsx skip-link + `<main id="main">` + nav `aria-label="Primary"`; new `lib/useFocusTrap.ts` helper wired into SymbolSearch and TweaksPanel (Tab/Shift+Tab cycle, focus restore on close); TweakToggle → `role="switch"` + `aria-checked`; HeroChart/MainChart/AIInsightsFeed range/filter tabs get full WAI-ARIA APG tabs pattern (roving tabindex, Arrow/Home/End nav). 28/28 E2E passing. Reduced motion: pulse + spin + symsearch dots all stilled. |
 | B4-E2E | Playwright E2E (4 페이지 스모크 + 인터랙션) | `app/tests/*.spec.ts` | document-skills:webapp-testing | 🟡 | **부분** (commits `6840b00`, `da152e5`): 13 tests passing in 1.9s — 6 smoke (shell·4 routes·/api/health proxy) + 7 interactions (IndicesStrip click, HeroChart 1M, Portfolio sort+filter, Detail 1Y, Tweaks accent+density). webServer reuses `npm run dev`. Bug found+fixed: Allocation skeleton key 중복. **남은 작업: visual regression(B2-MD 이후), unit tests(format.ts), keyboard a11y, mobile viewport** |
 | B4-CI | GitHub Actions CI (lint + typecheck + build + Playwright) | `.github/workflows/ci.yml` | backend-api-data-engineer | ⬜ | |
-| B4-VR | 시각 회귀 (Percy/Chromatic 또는 자체 스크린샷 비교) | `app/tests/visual/*` | document-skills:webapp-testing | 🟡 | |
+| B4-VR | 시각 회귀 (Percy/Chromatic 또는 자체 스크린샷 비교) | `app/tests/visual.spec.ts`, `app/tests/__screenshots__/`, `app/playwright.config.ts`, `app/package.json` | document-skills:webapp-testing | ✅ | 21 baselines = 6 routes × 3 viewports + 3 ⌘K overlays. Routes: /overview, /portfolio, /geo, /detail, /detail/AAPL, /settings. Viewports: 1440×900, 900×1100, 390×844. Determinism: `page.clock.install` pins time to 2026-04-30T13:42:18Z, freezeAnimations CSS injection nukes animation/transition/caret-color, waitForFetchSettled bails out after 8s for SSE-stuck routes (/geo). `toHaveScreenshot` defaults moved to playwright.config (animations:disabled, caret:hide, maxDiffPixelRatio:0.02). New scripts: `npm run test:visual` and `npm run test:visual:update`. Second-run all-green verified. Note: B4-RS landed mobile/tablet hamburger/grid changes during this work, so mobile+tablet baselines reflect post-RS layout; if RS continues to evolve, re-run `test:visual:update`. |
 
 ### 배치 B5 — 사용자/포트폴리오 영속화 (선택)
 
@@ -236,7 +236,8 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 - ✅ **B2-MD2** — Yahoo 안정화: TTL 30/60s → 300/600s, LastGoodCache + tryCache helper, market/security 모든 yahoo-기반 엔드포인트 500 → mock 200 fallback.
 - ✅ **B3 (4/4)** — AI 의존 UI 7섹션 모두 와이어링: AISignals/Sentiment, AIInsightsFeed (+ 카테고리 칩 필터), LiveAlertCard, AIHedgeSuggestion, AIInvestmentGuide, DisclosuresFeed.
 - ✅ **B4-RT** — `/detail/:symbol` 다이나믹 라우트 + 글로벌 ⌘K 심볼 검색 모달 (debounced getSearch, Up/Down/Enter, ARIA listbox).
-- 🟡 **B4-E2E** — **13/13 통과 in 3.9s** (Yahoo offline 시뮬레이션 OK, AI UI mock fallback OK, ⌘K 통합 OK). 잔여: 시각 회귀, A11y, 모바일 viewport, unit tests.
+- ✅ **B4-VR** — 21 시각 회귀 baselines (6 routes × 3 viewports + 3 ⌘K overlays). `page.clock` 시간 고정 + freezeAnimations CSS 주입으로 결정성 확보. `npm run test:visual` / `test:visual:update`.
+- 🟡 **B4-E2E** — **13/13 통과 in 3.9s** (Yahoo offline 시뮬레이션 OK, AI UI mock fallback OK, ⌘K 통합 OK). 잔여: A11y, 모바일 viewport, unit tests (시각 회귀는 B4-VR로 분리).
 - 실행: `npm run dev` (root) → Vite :5180 + Express :3001. ⌘K 검색·`/detail/<TICKER>` 직접 URL·Tweaks Provider 셀렉트 모두 동작.
 
 - ✅ **Phase 1 완료 (7/7)** — 두 라운드에 걸쳐 모두 완료:
