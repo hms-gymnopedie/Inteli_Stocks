@@ -7,6 +7,7 @@ import { Allocation } from './Allocation';
 import { EquityCurve } from './EquityCurve';
 import { HoldingsTable } from './HoldingsTable';
 import { KPIStrip } from './KPIStrip';
+import { RiskDecomposition } from './RiskDecomposition';
 import { TradesLog } from './TradesLog';
 
 export function Portfolio() {
@@ -70,6 +71,8 @@ export function Portfolio() {
           </div>
 
           <TradesLog />
+
+          <RiskDecomposition />
         </main>
 
         <div className="pf-aside-wrap">
