@@ -364,6 +364,33 @@ export interface AIVerdict {
   axes: ConvictionAxis[];
 }
 
+// ─── AI provider catalogue (B2-AI2) ───────────────────────────────────────────
+
+/** AI provider id. Add new ones as the backend gains them. */
+export type AIProvider = 'anthropic' | 'gemini';
+
+/** A single model offered by a provider. */
+export interface AIModelInfo {
+  id: string;
+  label: string;
+  default?: boolean;
+}
+
+/** A provider's catalogue entry as returned by GET /api/ai/models. */
+export interface AIProviderInfo {
+  id: AIProvider;
+  label: string;
+  configured: boolean;
+  models: AIModelInfo[];
+}
+
+/** Response shape for GET /api/ai/models. */
+export interface AIModelsResponse {
+  providers: AIProviderInfo[];
+  /** First configured provider id, or null when none have keys set. */
+  defaultProvider: AIProvider | null;
+}
+
 /** A hedge proposal from AI. */
 export interface HedgeProposal {
   proposalId: string;

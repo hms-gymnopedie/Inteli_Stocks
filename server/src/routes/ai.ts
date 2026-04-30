@@ -1,77 +1,78 @@
 import { Router, type Request, type Response } from 'express';
-import { isConfigured, client, DEFAULT_MODEL } from '../providers/anthropic.js';
+
+import {
+  type AIProvider,
+  defaultModelFor,
+  generate,
+  getModelsResponse,
+  providerConfigured,
+  resolveModel,
+} from '../providers/registry.js';
 
 /**
- * /api/ai/* — owned by B2-AI. Proxies Claude API.
+ * /api/ai/* — multi-provider proxy (B2-AI + B2-AI2)
  *
  * Endpoints:
- *   GET  /signals               → SSE stream of AISignal objects
- *   GET  /insights?portfolioId  → SSE stream of AIInsight objects
- *   POST /verdict               → JSON AIVerdict (body: { symbol })
- *   POST /hedge                 → JSON HedgeProposal (body: { exposure })
+ *   GET  /models                                  → AIModelsResponse
+ *   POST /verdict   body { symbol, provider?, model? }     → AIVerdict
+ *   POST /hedge     body { exposure, provider?, model? }   → HedgeProposal
+ *   GET  /signals?provider=&model=                → SSE stream of AISignal
+ *   GET  /insights?portfolioId=&provider=&model=  → SSE stream of AIInsight
  *
- * All endpoints respond 503 { ok: false, reason: 'anthropic_not_configured' }
- * when ANTHROPIC_API_KEY is absent.
+ * If the requested provider is not configured (no API key), endpoints respond
+ * 503 { ok: false, reason: '<provider>_not_configured' } so the frontend can
+ * fall back to mock generators.
  *
- * Prompt caching: stable system-prompt content blocks carry
- * cache_control: { type: 'ephemeral' } (claude-api skill pattern).
- * Cache lifetime ~5 min; breakeven ≥ 1024 tokens.
- *
- * Model: claude-opus-4-7 (DEFAULT_MODEL from provider)
+ * Caching: Anthropic uses cache_control: ephemeral on the system prompt;
+ * Gemini auto-caches identical content blocks server-side.
  */
 export const ai = Router();
 
-// ─── Shared 503 guard ─────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function notConfigured(res: Response): void {
-  res.status(503).json({ ok: false, reason: 'anthropic_not_configured' });
+function notConfigured(res: Response, provider: AIProvider): void {
+  res.status(503).json({ ok: false, reason: `${provider}_not_configured` });
 }
 
-// ─── JSON parse helper ────────────────────────────────────────────────────────
-
-/**
- * Try to extract a JSON object from Claude's text response.
- * Claude sometimes wraps JSON in a ```json ... ``` fence — strip it first.
- */
+/** Strip ```json fences and parse. */
 function parseJSON<T>(text: string): T {
   const stripped = text
     .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```\s*$/, '')
+    .replace(/^```\s*/i,    '')
+    .replace(/```\s*$/,     '')
     .trim();
   return JSON.parse(stripped) as T;
 }
 
-// ─── POST /verdict ────────────────────────────────────────────────────────────
+/** Pick provider from query/body, default to first configured. */
+function pickProvider(raw: unknown): AIProvider {
+  const id = typeof raw === 'string' ? raw : '';
+  if (id === 'anthropic' || id === 'gemini') return id;
+  // Default selection: first configured. If none configured, return 'anthropic'
+  // (callers will hit the 503 guard immediately).
+  const models = getModelsResponse();
+  return models.defaultProvider ?? 'anthropic';
+}
 
-/**
- * Returns the AI investment verdict for a stock symbol.
- *
- * Body: { symbol: string }
- * Response: AIVerdict
- *
- * System prompt is marked cache_control: ephemeral so repeated calls for
- * different symbols reuse the cached system context (>1024 tokens threshold).
- */
-ai.post('/verdict', async (req: Request, res: Response) => {
-  if (!isConfigured()) { notConfigured(res); return; }
+function sseHeaders(res: Response): void {
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+}
 
-  const { symbol } = req.body as { symbol?: string };
-  if (!symbol || typeof symbol !== 'string') {
-    res.status(400).json({ ok: false, reason: 'missing_symbol' });
-    return;
-  }
+function sseEvent(res: Response, event: string, data: unknown): void {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
 
-  const sym = symbol.trim().toUpperCase();
+function sseDone(res: Response): void {
+  res.write('event: done\ndata: {}\n\n');
+  res.end();
+}
 
-  try {
-    const message = await client().messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: 1024,
-      system: [
-        {
-          type: 'text',
-          text: `You are a professional equity analyst at an institutional trading desk.
+// ─── Prompts ─────────────────────────────────────────────────────────────────
+
+const VERDICT_SYSTEM = `You are a professional equity analyst at an institutional trading desk.
 When given a stock symbol, return a structured investment verdict in JSON.
 
 The JSON must match this exact schema:
@@ -91,52 +92,9 @@ The JSON must match this exact schema:
 }
 
 Color convention: score 4-5 → "up", score 1-2 → "down", score 3 → "accent".
-Return ONLY the JSON object. No explanation, no markdown fences.`,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze ${sym} and return the investment verdict JSON.`,
-        },
-      ],
-    });
+Return ONLY the JSON object. No explanation, no markdown fences.`;
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
-    const verdict = parseJSON(text);
-    res.json(verdict);
-  } catch (err) {
-    console.error('[B2-AI] /verdict error:', err);
-    res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
-  }
-});
-
-// ─── POST /hedge ──────────────────────────────────────────────────────────────
-
-/**
- * Returns a hedge proposal for a given portfolio exposure description.
- *
- * Body: { exposure: string }
- * Response: HedgeProposal
- */
-ai.post('/hedge', async (req: Request, res: Response) => {
-  if (!isConfigured()) { notConfigured(res); return; }
-
-  const { exposure } = req.body as { exposure?: string };
-  if (!exposure || typeof exposure !== 'string') {
-    res.status(400).json({ ok: false, reason: 'missing_exposure' });
-    return;
-  }
-
-  try {
-    const message = await client().messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: 1024,
-      system: [
-        {
-          type: 'text',
-          text: `You are a portfolio risk manager at a hedge fund.
+const HEDGE_SYSTEM = `You are a portfolio risk manager at a hedge fund.
 When given a description of portfolio exposure or risk, return a structured hedge proposal in JSON.
 
 The JSON must match this exact schema:
@@ -147,187 +105,159 @@ The JSON must match this exact schema:
   "actions": string[] (2-4 action labels, e.g. ["SIMULATE", "DISMISS"])
 }
 
-Return ONLY the JSON object. No explanation, no markdown fences.`,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        {
-          role: 'user',
-          content: `Portfolio exposure: ${exposure.trim()}\n\nReturn the hedge proposal JSON.`,
-        },
-      ],
-    });
+Return ONLY the JSON object. No explanation, no markdown fences.`;
 
-    const text = message.content[0].type === 'text' ? message.content[0].text : '';
-    const proposal = parseJSON(text);
-    res.json(proposal);
+const SIGNALS_SYSTEM = `You are a markets desk at an institutional trading firm.
+Emit short-form actionable signal cards as a JSON array.
+
+Each item must match:
+{
+  "id":   string (unique short id),
+  "type": "SIGNAL" | "CAUTION" | "INFO",
+  "when": string (e.g. "4m AGO", "18m AGO"),
+  "body": string (1-2 sentences, max 180 chars),
+  "tags": string[] (2-3 tags like ["RISK 2/5", "ACTION · ADD"])
+}
+
+Return ONLY a JSON array of 3-5 such objects. No explanation, no markdown fences.`;
+
+const INSIGHTS_SYSTEM = `You are a portfolio AI assistant.
+Emit insight cards tailored to the user's portfolio as a JSON array.
+
+Each item must match:
+{
+  "id":      string (unique short id),
+  "tag":     "OPPORTUNITY" | "RISK" | "MACRO" | "EARNINGS",
+  "when":    string (e.g. "2m ago", "1h ago"),
+  "tone":    "orange" | "down" | "fg",
+  "title":   string (max 50 chars),
+  "body":    string (1-2 sentences, max 200 chars),
+  "actions": string[] (1-3 action labels),
+  "risk":    string (e.g. "2/5"),
+  "score":   number (0-100)
+}
+
+Return ONLY a JSON array of 3-5 such objects. No explanation, no markdown fences.`;
+
+// ─── GET /models ─────────────────────────────────────────────────────────────
+
+ai.get('/models', (_req: Request, res: Response) => {
+  res.json(getModelsResponse());
+});
+
+// ─── POST /verdict ───────────────────────────────────────────────────────────
+
+ai.post('/verdict', async (req: Request, res: Response) => {
+  const body = req.body as { symbol?: string; provider?: string; model?: string };
+  const provider = pickProvider(body.provider);
+
+  if (!providerConfigured(provider)) { notConfigured(res, provider); return; }
+  if (!body.symbol || typeof body.symbol !== 'string') {
+    res.status(400).json({ ok: false, reason: 'missing_symbol' });
+    return;
+  }
+
+  const sym   = body.symbol.trim().toUpperCase();
+  const model = resolveModel(provider, body.model);
+
+  try {
+    const text = await generate({
+      provider,
+      model,
+      system: VERDICT_SYSTEM,
+      user:   `Analyze ${sym} and return the investment verdict JSON.`,
+    });
+    res.json(parseJSON(text));
+  } catch (err) {
+    console.error('[B2-AI] /verdict error:', err);
+    res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
+  }
+});
+
+// ─── POST /hedge ─────────────────────────────────────────────────────────────
+
+ai.post('/hedge', async (req: Request, res: Response) => {
+  const body = req.body as { exposure?: string; provider?: string; model?: string };
+  const provider = pickProvider(body.provider);
+
+  if (!providerConfigured(provider)) { notConfigured(res, provider); return; }
+  if (!body.exposure || typeof body.exposure !== 'string') {
+    res.status(400).json({ ok: false, reason: 'missing_exposure' });
+    return;
+  }
+
+  const model = resolveModel(provider, body.model);
+
+  try {
+    const text = await generate({
+      provider,
+      model,
+      system: HEDGE_SYSTEM,
+      user:   `Portfolio exposure: ${body.exposure.trim()}\n\nReturn the hedge proposal JSON.`,
+    });
+    res.json(parseJSON(text));
   } catch (err) {
     console.error('[B2-AI] /hedge error:', err);
     res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
   }
 });
 
-// ─── SSE helpers ──────────────────────────────────────────────────────────────
+// ─── GET /signals (SSE) ──────────────────────────────────────────────────────
 
-function sseHeaders(res: Response): void {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  // Disable Nginx / Express response buffering so each chunk lands immediately.
-  res.setHeader('X-Accel-Buffering', 'no');
-}
+ai.get('/signals', async (req: Request, res: Response) => {
+  const provider = pickProvider(req.query.provider);
+  if (!providerConfigured(provider)) { notConfigured(res, provider); return; }
 
-function sseEvent(res: Response, event: string, data: unknown): void {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-
-function sseDone(res: Response): void {
-  res.write('event: done\ndata: {}\n\n');
-  res.end();
-}
-
-// ─── GET /signals ─────────────────────────────────────────────────────────────
-
-/**
- * Streams AI signal cards (Overview right panel) via Server-Sent Events.
- *
- * Calls Claude with streaming enabled; after the full response is collected,
- * emits each parsed AISignal as an individual SSE event, then closes the stream.
- *
- * System prompt is cached (ephemeral) — stable context reused across requests.
- */
-ai.get('/signals', async (_req: Request, res: Response) => {
-  if (!isConfigured()) { notConfigured(res); return; }
+  const model = resolveModel(provider, req.query.model as string | undefined);
 
   sseHeaders(res);
-
   try {
-    // Use non-streaming for reliability; emit parsed objects as SSE events.
-    // Streaming text-delta parsing for structured JSON is fragile — we get
-    // the full response then fan it out as SSE so the frontend still uses
-    // EventSource for consumption consistency.
-    const message = await client().messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: 2048,
-      system: [
-        {
-          type: 'text',
-          text: `You are a markets desk AI generating actionable signal cards for a Bloomberg-style trading dashboard.
-Generate exactly 3 short-form signal cards as a JSON array.
-
-Each card must match this schema:
-{
-  "id": string (e.g. "sig-001"),
-  "type": "SIGNAL" | "CAUTION" | "INFO",
-  "when": string (relative time, e.g. "2m AGO" or "15m AGO"),
-  "body": string (1-2 sentences, max 180 chars, professional trading desk tone),
-  "tags": string[] (2-3 tags, e.g. ["RISK 2/5", "ACTION · ADD"])
-}
-
-Reflect real market dynamics: semis, energy, macro rates, FX, and geopolitical risk.
-Return ONLY a JSON array. No explanation, no markdown fences.`,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        {
-          role: 'user',
-          content: 'Generate 3 market signal cards for the current trading session.',
-        },
-      ],
+    const text = await generate({
+      provider,
+      model,
+      system:    SIGNALS_SYSTEM,
+      user:      'Emit current market signal cards as a JSON array (3-5 items).',
+      maxTokens: 2048,
     });
-
-    const text = message.content[0].type === 'text' ? message.content[0].text : '[]';
-    const signals = parseJSON<unknown[]>(text);
-
-    for (const signal of signals) {
-      sseEvent(res, 'signal', signal);
-    }
+    const items = parseJSON<unknown[]>(text);
+    if (!Array.isArray(items)) throw new Error('signals: not an array');
+    for (const item of items) sseEvent(res, 'signal', item);
     sseDone(res);
   } catch (err) {
     console.error('[B2-AI] /signals error:', err);
-    sseEvent(res, 'error', { reason: 'upstream_error', detail: String(err) });
+    sseEvent(res, 'error', { message: String(err) });
     res.end();
   }
 });
 
-// ─── GET /insights ────────────────────────────────────────────────────────────
+// ─── GET /insights (SSE) ─────────────────────────────────────────────────────
 
-/**
- * Streams AI insight cards for the portfolio feed via Server-Sent Events.
- *
- * Query: portfolioId (optional; reserved for multi-portfolio B5)
- * Uses a mock portfolio context for now (real portfolio data lands in B2-MD).
- *
- * System prompt is cached (ephemeral).
- */
 ai.get('/insights', async (req: Request, res: Response) => {
-  if (!isConfigured()) { notConfigured(res); return; }
+  const provider = pickProvider(req.query.provider);
+  if (!providerConfigured(provider)) { notConfigured(res, provider); return; }
 
-  const portfolioId = (req.query.portfolioId as string | undefined) ?? 'default';
+  const portfolioId = String(req.query.portfolioId ?? 'default');
+  const model       = resolveModel(provider, req.query.model as string | undefined);
 
   sseHeaders(res);
-
-  // Mock portfolio context injected until B2-MD portfolio adapter is complete.
-  const portfolioContext = `Portfolio ID: ${portfolioId}
-Holdings snapshot (mock):
-- NVDA  8.2%  Tech / Semis
-- AAPL  6.1%  Tech / Hardware
-- TSM   6.4%  Tech / Semis (Taiwan geo risk)
-- MSFT  5.8%  Tech / Cloud
-- XLE   4.3%  Energy ETF
-- KRW=X 3.1%  FX / KRW exposure
-- US10Y 7.2%  Duration / Rates
-Portfolio beta: 1.18
-Region: 62% US, 18% Korea/Taiwan, 12% Europe, 8% EM`;
-
   try {
-    const message = await client().messages.create({
-      model: DEFAULT_MODEL,
-      max_tokens: 3072,
-      system: [
-        {
-          type: 'text',
-          text: `You are an AI portfolio analyst generating actionable insight cards for a trading dashboard.
-Given a portfolio snapshot, generate exactly 4 insight cards covering OPPORTUNITY, RISK, MACRO, and EARNINGS themes.
-
-Each card must match this schema:
-{
-  "id": string (e.g. "ins-001"),
-  "tag": "OPPORTUNITY" | "RISK" | "MACRO" | "EARNINGS",
-  "when": string (relative time, e.g. "2m ago"),
-  "tone": "orange" | "down" | "fg",
-  "title": string (max 50 chars),
-  "body": string (2-3 sentences, max 250 chars, quantified where possible),
-  "actions": string[] (1-3 action labels, e.g. ["SIMULATE +2%", "IGNORE"]),
-  "risk": string (e.g. "3/5"),
-  "score": number (0-100, overall opportunity/risk score)
-}
-
-Tone convention: OPPORTUNITY → "orange", RISK/EARNINGS → "down" if high risk or "fg" if neutral, MACRO → "fg".
-Return ONLY a JSON array of 4 cards. No explanation, no markdown fences.`,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze this portfolio and return 4 insight cards:\n\n${portfolioContext}`,
-        },
-      ],
+    const text = await generate({
+      provider,
+      model,
+      system:    INSIGHTS_SYSTEM,
+      user:      `Emit insight cards for portfolio ${portfolioId} as a JSON array (3-5 items).`,
+      maxTokens: 2048,
     });
-
-    const text = message.content[0].type === 'text' ? message.content[0].text : '[]';
-    const insights = parseJSON<unknown[]>(text);
-
-    for (const insight of insights) {
-      sseEvent(res, 'insight', insight);
-    }
+    const items = parseJSON<unknown[]>(text);
+    if (!Array.isArray(items)) throw new Error('insights: not an array');
+    for (const item of items) sseEvent(res, 'insight', item);
     sseDone(res);
   } catch (err) {
     console.error('[B2-AI] /insights error:', err);
-    sseEvent(res, 'error', { reason: 'upstream_error', detail: String(err) });
+    sseEvent(res, 'error', { message: String(err) });
     res.end();
   }
 });
+
+// Avoid unused-symbol lint; keep export for callers that may want defaults.
+export { defaultModelFor };

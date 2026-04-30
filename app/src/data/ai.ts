@@ -6,6 +6,8 @@
 
 import type {
   AIInsight,
+  AIModelsResponse,
+  AIProvider,
   AISignal,
   AIVerdict,
   ConvictionAxis,
@@ -15,6 +17,48 @@ import type {
 // ─── API base ────────────────────────────────────────────────────────────────
 
 const AI_BASE = '/api/ai';
+
+// ─── Provider/model selection (set by Tweaks panel) ──────────────────────────
+
+let activeProvider: AIProvider | null = null;
+let activeModel: string | null = null;
+
+/**
+ * Set the active AI provider+model. Tweaks calls this whenever the user
+ * changes the selection. All subsequent AI fetchers include these in their
+ * requests so the backend dispatches to the right SDK.
+ */
+export function setActiveAI(provider: AIProvider | null, model: string | null): void {
+  activeProvider = provider;
+  activeModel    = model;
+}
+
+function aiQuery(): string {
+  const params = new URLSearchParams();
+  if (activeProvider) params.set('provider', activeProvider);
+  if (activeModel)    params.set('model', activeModel);
+  const qs = params.toString();
+  return qs ? `&${qs}` : '';
+}
+
+function aiBody(extra: Record<string, unknown>): string {
+  const out: Record<string, unknown> = { ...extra };
+  if (activeProvider) out.provider = activeProvider;
+  if (activeModel)    out.model    = activeModel;
+  return JSON.stringify(out);
+}
+
+/** Fetch the catalogue of available providers and their models. */
+export async function getModels(): Promise<AIModelsResponse> {
+  try {
+    const res = await fetch(`${AI_BASE}/models`);
+    if (!res.ok) throw new Error(`models: HTTP ${res.status}`);
+    return (await res.json()) as AIModelsResponse;
+  } catch {
+    // Backend unreachable — return empty catalogue so UI degrades gracefully.
+    return { providers: [], defaultProvider: null };
+  }
+}
 
 // ─── Helper ──────────────────────────────────────────────────────────────────
 
@@ -196,9 +240,10 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
  * Tries the backend SSE endpoint first; falls back to mock on 503 / network error.
  */
 export async function* streamSignals(): AsyncIterable<AISignal> {
+  const url = `${AI_BASE}/signals?_=${Date.now()}${aiQuery()}`;
   // Probe the backend: if it returns 503 (no key), use mock immediately.
   try {
-    const probe = await fetch(`${AI_BASE}/signals`, { method: 'HEAD' }).catch(
+    const probe = await fetch(url, { method: 'HEAD' }).catch(
       () => null,
     );
     // HEAD on SSE endpoint may return 200 or 405 depending on Express version.
@@ -213,7 +258,7 @@ export async function* streamSignals(): AsyncIterable<AISignal> {
   }
 
   try {
-    yield* consumeSSE<AISignal>(`${AI_BASE}/signals`, 'signal');
+    yield* consumeSSE<AISignal>(url, 'signal');
   } catch {
     yield* mockSignals();
   }
@@ -225,7 +270,7 @@ export async function* streamSignals(): AsyncIterable<AISignal> {
  * Falls back to mock on 503 / network error.
  */
 export async function* streamInsights(portfolioId: string): AsyncIterable<AIInsight> {
-  const url = `${AI_BASE}/insights?portfolioId=${encodeURIComponent(portfolioId)}`;
+  const url = `${AI_BASE}/insights?portfolioId=${encodeURIComponent(portfolioId)}${aiQuery()}`;
 
   try {
     const probe = await fetch(url, { method: 'HEAD' }).catch(() => null);
@@ -254,7 +299,7 @@ export async function proposeHedge(exposure: string): Promise<HedgeProposal> {
     const res = await fetch(`${AI_BASE}/hedge`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ exposure }),
+      body:    aiBody({ exposure }),
     });
     if (!res.ok) {
       // 503 = not configured; anything else = upstream error → fallback
@@ -277,7 +322,7 @@ export async function getVerdict(symbol: string): Promise<AIVerdict> {
     const res = await fetch(`${AI_BASE}/verdict`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ symbol }),
+      body:    aiBody({ symbol }),
     });
     if (!res.ok) {
       return mockVerdict(symbol);

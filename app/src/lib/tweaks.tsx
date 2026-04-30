@@ -7,6 +7,9 @@ import {
   type ReactNode,
 } from 'react';
 
+import { getModels, setActiveAI } from '../data/ai';
+import type { AIModelsResponse, AIProvider } from '../data/types';
+
 export type ChartStyle = 'line' | 'candle' | 'area';
 export type MapStyle = 'satellite' | 'terrain' | 'mono';
 export type Density = 'compact' | 'comfortable' | 'spacious';
@@ -20,6 +23,10 @@ export interface Tweaks {
   timezone: string;
   locale: string;
   currency: string;
+  /** Selected AI provider, or null to let backend pick first configured. */
+  aiProvider: AIProvider | null;
+  /** Selected model id within the provider, or null for provider default. */
+  aiModel: string | null;
 }
 
 const DEFAULTS: Tweaks = {
@@ -31,6 +38,8 @@ const DEFAULTS: Tweaks = {
   timezone: 'America/New_York',
   locale: 'en-US',
   currency: 'USD',
+  aiProvider: null,
+  aiModel: null,
 };
 
 const STORAGE_KEY = 'intelistock.tweaks.v1';
@@ -64,18 +73,32 @@ interface TweaksContextValue {
   values: Tweaks;
   setTweak: <K extends keyof Tweaks>(key: K, value: Tweaks[K]) => void;
   reset: () => void;
+  /** AI providers + models catalogue from GET /api/ai/models. */
+  aiCatalogue: AIModelsResponse;
 }
 
 const TweaksContext = createContext<TweaksContextValue | null>(null);
 
+const EMPTY_CATALOGUE: AIModelsResponse = { providers: [], defaultProvider: null };
+
 export function TweaksProvider({ children }: { children: ReactNode }) {
   // Start from DEFAULTS so SSR matches CSR; hydrate from localStorage on mount.
   const [values, setValues] = useState<Tweaks>(DEFAULTS);
+  const [aiCatalogue, setAiCatalogue] = useState<AIModelsResponse>(EMPTY_CATALOGUE);
 
   useEffect(() => {
     const loaded = loadFromStorage();
     setValues(loaded);
     // No write here — saveToStorage runs from setTweak/reset only.
+  }, []);
+
+  // Fetch the AI provider/model catalogue once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    getModels().then((cat) => {
+      if (!cancelled) setAiCatalogue(cat);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -94,9 +117,15 @@ export function TweaksProvider({ children }: { children: ReactNode }) {
     document.documentElement.setAttribute('lang', values.locale);
   }, [values.accent, values.density, values.locale]);
 
+  // Forward provider/model selection into data/ai.ts so all AI fetchers carry it.
+  useEffect(() => {
+    setActiveAI(values.aiProvider, values.aiModel);
+  }, [values.aiProvider, values.aiModel]);
+
   const ctx = useMemo<TweaksContextValue>(
     () => ({
       values,
+      aiCatalogue,
       setTweak: (key, value) =>
         setValues((prev) => {
           const next = { ...prev, [key]: value };
@@ -114,7 +143,7 @@ export function TweaksProvider({ children }: { children: ReactNode }) {
         setValues(DEFAULTS);
       },
     }),
-    [values],
+    [values, aiCatalogue],
   );
 
   return (
@@ -277,7 +306,31 @@ const CURRENCY_OPTIONS: SelectOption[] = [
 
 export function TweaksPanel() {
   const [open, setOpen] = useState(false);
-  const { values, setTweak, reset } = useTweaks();
+  const { values, setTweak, reset, aiCatalogue } = useTweaks();
+
+  // Provider dropdown — disabled options (no key configured) get a "(off)" hint.
+  const providerOptions: SelectOption[] = aiCatalogue.providers.map((p) => ({
+    label: p.configured ? p.label : `${p.label} (off)`,
+    value: p.id,
+  }));
+
+  // Active provider (user's pick → backend default → first in catalogue).
+  const selectedProviderId =
+    values.aiProvider ?? aiCatalogue.defaultProvider ?? aiCatalogue.providers[0]?.id ?? '';
+  const selectedProvider = aiCatalogue.providers.find(
+    (p) => p.id === selectedProviderId,
+  );
+
+  // Models for that provider — fall back to first if none default-marked.
+  const modelOptions: SelectOption[] = (selectedProvider?.models ?? []).map((m) => ({
+    label: m.label,
+    value: m.id,
+  }));
+  const providerDefaultModel =
+    selectedProvider?.models.find((m) => m.default)?.id ??
+    selectedProvider?.models[0]?.id ??
+    '';
+  const selectedModelId = values.aiModel ?? providerDefaultModel;
 
   return (
     <>
@@ -363,6 +416,55 @@ export function TweaksPanel() {
               onChange={(v) => setTweak('currency', v)}
               options={CURRENCY_OPTIONS}
             />
+          </div>
+          <div className="tw-section">
+            <div className="tw-section-label">AI</div>
+            {providerOptions.length === 0 ? (
+              <div
+                className="tw-row"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize:   10,
+                  color:      'var(--fg-3, #6b6b6b)',
+                }}
+              >
+                Backend offline
+              </div>
+            ) : (
+              <>
+                <TweakSelect
+                  label="Provider"
+                  value={selectedProviderId}
+                  onChange={(v) => {
+                    setTweak('aiProvider', v as AIProvider);
+                    // Reset model when provider changes — let the next select
+                    // default to the new provider's first/default model.
+                    setTweak('aiModel', null);
+                  }}
+                  options={providerOptions}
+                />
+                <TweakSelect
+                  label="Model"
+                  value={selectedModelId}
+                  onChange={(v) => setTweak('aiModel', v)}
+                  options={modelOptions}
+                />
+                {selectedProvider && !selectedProvider.configured && (
+                  <div
+                    className="tw-row"
+                    style={{
+                      fontFamily:    'var(--font-mono)',
+                      fontSize:      9,
+                      color:         'var(--down, #ff7a7a)',
+                      letterSpacing: '0.06em',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    set {selectedProvider.id.toUpperCase()}_API_KEY in .env
+                  </div>
+                )}
+              </>
+            )}
           </div>
           <div className="tw-section">
             <button
