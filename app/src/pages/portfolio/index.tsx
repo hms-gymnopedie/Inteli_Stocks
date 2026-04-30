@@ -7,6 +7,7 @@ import { Allocation } from './Allocation';
 import { EquityCurve } from './EquityCurve';
 import { HoldingsTable } from './HoldingsTable';
 import { KPIStrip } from './KPIStrip';
+import { TradesLog } from './TradesLog';
 
 export function Portfolio() {
   const holdingsRef = useRef<HTMLDivElement>(null);
@@ -67,6 +68,8 @@ export function Portfolio() {
           <div ref={holdingsRef} className="pf-holdings-wrap">
             <HoldingsTable />
           </div>
+
+          <TradesLog />
         </main>
 
         <div className="pf-aside-wrap">
