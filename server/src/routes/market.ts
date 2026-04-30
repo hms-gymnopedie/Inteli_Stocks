@@ -42,11 +42,56 @@ interface SectorReturn {
   v: number;
 }
 
+// ─── Hardcoded mock data (B2-MD2 fallbacks) ───────────────────────────────────
+
+/**
+ * Minimal mock indices — shown when Yahoo is rate-limited and no last-good cache.
+ * Prices are seed values from app/src/data/market.ts TICKER_STRIP.
+ */
+const MOCK_INDICES: Index[] = [
+  { ticker: 'SPX',    label: 'S&P 500',  price: '5,248.49',  change: '—',   direction:  1 },
+  { ticker: 'COMP',   label: 'NASDAQ',   price: '16,384.47', change: '—',   direction:  1 },
+  { ticker: 'INDU',   label: 'DOW',      price: '39,127.14', change: '—',   direction:  1 },
+  { ticker: '^KS11',  label: 'KOSPI',    price: '2,692.06',  change: '—',   direction:  1 },
+  { ticker: '^VIX',   label: 'VIX',      price: '13.67',     change: '—',   direction: -1 },
+  { ticker: 'DXY',    label: 'DXY',      price: '104.32',    change: '—',   direction: -1 },
+  { ticker: '^TNX',   label: '10Y UST',  price: '4.348%',    change: '—',   direction: -1 },
+  { ticker: 'BTC',    label: 'BTC',      price: '70,287.20', change: '—',   direction:  1 },
+];
+
+/**
+ * Minimal mock sectors — 11 SPDR ETFs with zero day-change.
+ */
+const MOCK_SECTORS: SectorReturn[] = [
+  { name: 'Technology',        v: 0 },
+  { name: 'Energy',            v: 0 },
+  { name: 'Financials',        v: 0 },
+  { name: 'Health Care',       v: 0 },
+  { name: 'Consumer Discr.',   v: 0 },
+  { name: 'Industrials',       v: 0 },
+  { name: 'Consumer Staples',  v: 0 },
+  { name: 'Materials',         v: 0 },
+  { name: 'Utilities',         v: 0 },
+  { name: 'Real Estate',       v: 0 },
+  { name: 'Communication',     v: 0 },
+];
+
+/**
+ * Minimal mock macro indicators.
+ */
+const MOCK_MACRO = [
+  { key: 'US10Y',   label: 'US 10Y',   value: '—', delta: '—', seed: 11, trend:  0 },
+  { key: 'CPI_YOY', label: 'CPI YoY',  value: '—', delta: '—', seed: 12, trend:  0 },
+  { key: 'USD_KRW', label: 'USD/KRW',  value: '—', delta: '—', seed: 13, trend:  0 },
+  { key: 'WTI',     label: 'WTI Crude',value: '—', delta: '—', seed: 14, trend:  0 },
+];
+
 // ─── GET /api/market/indices ──────────────────────────────────────────────────
 
 /**
  * Returns the 8-entry ticker strip.
  * Yahoo symbols: ^GSPC ^IXIC ^DJI ^KS11 ^VIX DX-Y.NYB ^TNX BTC-USD
+ * B2-MD2: on error returns MOCK_INDICES (200, not 500).
  */
 market.get('/indices', async (_req: Request, res: Response) => {
   try {
@@ -91,8 +136,8 @@ market.get('/indices', async (_req: Request, res: Response) => {
 
     res.json(result);
   } catch (err) {
-    console.error('[market/indices]', err);
-    res.status(500).json({ ok: false, error: 'Failed to fetch indices' });
+    console.error('[B2-MD2] /indices fallback triggered:', (err as Error).message);
+    res.json(MOCK_INDICES);
   }
 });
 
@@ -126,7 +171,7 @@ market.get('/intraday', async (req: Request, res: Response) => {
       }));
     res.json(bars);
   } catch (err) {
-    console.error('[market/intraday]', yahooSymbol, err);
+    console.error('[B2-MD2] /intraday fallback triggered:', yahooSymbol, (err as Error).message);
     // Return synthetic bars as fallback so the UI doesn't break
     res.json(generateMockBars(rawSymbol, range));
   }
@@ -136,6 +181,7 @@ market.get('/intraday', async (req: Request, res: Response) => {
 
 /**
  * Returns sector returns derived from 11 SPDR ETF day-change %.
+ * B2-MD2: on error returns MOCK_SECTORS (200, not 500).
  */
 market.get('/sectors', async (_req: Request, res: Response) => {
   try {
@@ -153,8 +199,8 @@ market.get('/sectors', async (_req: Request, res: Response) => {
 
     res.json(result);
   } catch (err) {
-    console.error('[market/sectors]', err);
-    res.status(500).json({ ok: false, error: 'Failed to fetch sectors' });
+    console.error('[B2-MD2] /sectors fallback triggered:', (err as Error).message);
+    res.json(MOCK_SECTORS);
   }
 });
 
@@ -163,6 +209,7 @@ market.get('/sectors', async (_req: Request, res: Response) => {
 /**
  * Macro indicators. Yahoo handles US10Y, USD_KRW, WTI.
  * CPI_YOY is delegated to providers/fred.ts via dynamic import with fallback.
+ * B2-MD2: on error returns MOCK_MACRO (200, not 500).
  */
 market.get('/macro', async (req: Request, res: Response) => {
   const keyParam = String(req.query.keys ?? 'US10Y,CPI_YOY,USD_KRW,WTI');
@@ -244,8 +291,10 @@ market.get('/macro', async (req: Request, res: Response) => {
 
     res.json(results);
   } catch (err) {
-    console.error('[market/macro]', err);
-    res.status(500).json({ ok: false, error: 'Failed to fetch macro data' });
+    console.error('[B2-MD2] /macro fallback triggered:', (err as Error).message);
+    // Return only the keys that were requested
+    const fallback = MOCK_MACRO.filter((m) => (activeKeys as readonly string[]).includes(m.key));
+    res.json(fallback.length > 0 ? fallback : MOCK_MACRO);
   }
 });
 
@@ -331,6 +380,7 @@ market.get('/session-volume', (_req: Request, res: Response) => {
 
 /**
  * Searches Yahoo Finance for matching symbols.
+ * B2-MD2: on error returns [] (200, not 500).
  */
 market.get('/search', async (req: Request, res: Response) => {
   const q = String(req.query.q ?? '').trim();
@@ -351,8 +401,8 @@ market.get('/search', async (req: Request, res: Response) => {
       }));
     res.json(results);
   } catch (err) {
-    console.error('[market/search]', err);
-    res.status(500).json({ ok: false, error: 'Search failed' });
+    console.error('[B2-MD2] /search fallback triggered:', q, (err as Error).message);
+    res.json([]);
   }
 });
 
