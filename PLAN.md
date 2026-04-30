@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-04-29 (Phase 2 완료 — B2-MD/FRED/SEC/AI 모두 ✅)
+**Last updated:** 2026-04-30 (B2-AI2 완료 — Gemini + 모델 스위처)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -158,6 +158,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | B2-SEC | SEC EDGAR 어댑터 (공시 원문 메타데이터) | `server/providers/sec.ts`, `server/routes/security.ts` 확장 | backend-api-data-engineer | ✅ | Provider `getCompanyTickers()` (1회 캐시) + `getRecentFilings(cik,limit)`. Routes endpoint `GET /:symbol/filings` — staging-bleed로 B2-MD `33c4a33` commit에 함께 묶임 (메시지 명시). 한국 ticker(.KS/.KQ)는 `[]` 200. User-Agent 헤더. (`f0cc620`) |
 | B2-AI | AI 백엔드 프록시 (Claude API 라우터, 스트리밍, 응답 캐시) | `server/routes/ai.ts` | backend-api-data-engineer + claude-api skill | ✅ | Model `claude-opus-4-7`. `cache_control:{type:'ephemeral'}` on system-prompt for all 4 endpoints. SSE GET /signals + /insights 파싱 후 이벤트 fan-out. POST /verdict + /hedge JSON. Frontend HEAD probe → 503 시 mock generator로 fallback. (`489b8dc`→`7fc9027`→`415c93c`→`ac5c914`) |
 | B2-TW | Tweaks 확장 (timezone, locale, currency, 컬럼설정 영속화) | `app/src/lib/tweaks.tsx` | frontend-ui-integrator | ✅ | localStorage 영속화 (`intelistock.tweaks.v1`), timezone/locale/currency selects, reset 버튼, locale → `<html lang>` 반영. 기존 useTweaks consumers 호환. |
+| B2-AI2 | 멀티프로바이더 AI (Anthropic + Gemini) + 대시보드 모델 스위처 | `server/providers/{gemini,registry}.ts`, `server/routes/ai.ts`, `app/src/data/{types,ai}.ts`, `app/src/lib/tweaks.tsx`, `.env.example` | main | ✅ | (`145cfec`) `@google/genai` 추가. registry.ts에 PROVIDERS 카탈로그 + `generate()` 단일 디스패치. 모든 AI 엔드포인트가 `?provider=&model=` 쿼리/바디 파라미터 수용. `GET /api/ai/models` 신규. Tweaks 패널에 "AI" 섹션 (Provider · Model 셀렉트) 추가, 카탈로그 mount-time fetch, 비설정 provider는 "(off)" + env var 안내. defaults: opus-4-7 / gemini-2.5-pro. |
 
 ### 배치 B3 — AI 의존 섹션 (B2-AI 완료 후)
 
