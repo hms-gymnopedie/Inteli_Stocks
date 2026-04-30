@@ -28,6 +28,7 @@ export function Portfolio() {
   return (
     <div className="app-frame" style={{ fontSize: 12 }}>
       <div
+        className="pf-grid"
         style={{
           flex: 1,
           display: 'grid',
@@ -36,6 +37,7 @@ export function Portfolio() {
         }}
       >
         <main
+          className="pf-main"
           style={{
             padding: 14,
             overflow: 'auto',
@@ -44,21 +46,32 @@ export function Portfolio() {
             gap: 10,
           }}
         >
-          <KPIStrip />
+          {/*
+           * Wrappers carry the responsive class hooks so the CSS in
+           * styles.css (RESPONSIVE B4-RS section) can reach the grids
+           * that live inside the section components — section files
+           * themselves are off-limits for this task.
+           */}
+          <div className="pf-kpi-wrap">
+            <KPIStrip />
+          </div>
 
           <div
+            className="pf-charts-row"
             style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}
           >
             <EquityCurve />
             <Allocation onSliceClick={handleSliceClick} />
           </div>
 
-          <div ref={holdingsRef}>
+          <div ref={holdingsRef} className="pf-holdings-wrap">
             <HoldingsTable />
           </div>
         </main>
 
-        <AIInsightsFeed />
+        <div className="pf-aside-wrap">
+          <AIInsightsFeed />
+        </div>
       </div>
     </div>
   );
