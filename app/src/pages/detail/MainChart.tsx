@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { getOHLC } from '../../data/security';
 import type { Range } from '../../data/types';
@@ -35,6 +35,22 @@ export function MainChart({
     () => getOHLC(symbol, range),
     [symbol, range],
   );
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // ARIA tabs keyboard pattern: Left/Right move+activate, Home/End jump,
+  // and only the selected tab is reachable via the page's Tab key
+  // (tabIndex=0); the others are tabIndex=-1.
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    let next = idx;
+    if (e.key === 'ArrowRight') next = (idx + 1) % RANGES.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + RANGES.length) % RANGES.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = RANGES.length - 1;
+    else return;
+    e.preventDefault();
+    setRange(RANGES[next]);
+    tabRefs.current[next]?.focus();
+  };
 
   // Aggregate volume for the displayed window — formatted with K/M/B/T suffix.
   const totalVolume = useMemo(() => {
@@ -54,15 +70,18 @@ export function MainChart({
     <div className="wf-panel" style={{ padding: 14 }} aria-busy={loading}>
       <div className="row between">
         <div className="row gap-2" role="tablist" aria-label="Time range">
-          {RANGES.map((t) => {
+          {RANGES.map((t, i) => {
             const active = t === range;
             return (
               <button
                 key={t}
+                ref={(el) => { tabRefs.current[i] = el; }}
                 type="button"
                 role="tab"
                 aria-selected={active}
+                tabIndex={active ? 0 : -1}
                 onClick={() => setRange(t)}
+                onKeyDown={(e) => onTabKeyDown(e, i)}
                 className={'tab' + (active ? ' active' : '')}
                 style={{
                   padding: '4px 10px',
@@ -79,7 +98,7 @@ export function MainChart({
             );
           })}
         </div>
-        <div className="row gap-2">
+        <div className="row gap-2" role="group" aria-label="Chart studies">
           {STUDY_KEYS.map((s) => {
             const active = studies.has(s);
             return (
@@ -87,6 +106,7 @@ export function MainChart({
                 key={s}
                 type="button"
                 aria-pressed={active}
+                aria-label={`${s} study ${active ? 'on' : 'off'}`}
                 onClick={() => onToggleStudy?.(s)}
                 className="tag"
                 style={{
@@ -103,6 +123,7 @@ export function MainChart({
           })}
           <span
             className="tag"
+            aria-hidden="true"
             style={{
               color: 'var(--orange)',
               borderColor: 'var(--orange)',

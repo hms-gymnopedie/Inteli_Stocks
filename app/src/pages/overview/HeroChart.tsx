@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { getIntraday } from '../../data/market';
 import type { OHLC, Range } from '../../data/types';
 import { CandleChart, LineChart } from '../../lib/primitives';
@@ -12,6 +12,23 @@ export function HeroChart() {
   const { values } = useTweaks();
   const showGrid = values.showGrid;
   const [range, setRange] = useState<Range>('1W');
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // Arrow-key navigation per WAI-ARIA Authoring Practices for tabs:
+  // Left/Right move + activate the previous/next tab and focus it,
+  // Home/End jump to first/last. Tab itself enters/exits the tablist
+  // (only the selected tab is reachable via Tab, others are tabindex=-1).
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    let next = idx;
+    if (e.key === 'ArrowRight') next = (idx + 1) % RANGES.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + RANGES.length) % RANGES.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = RANGES.length - 1;
+    else return;
+    e.preventDefault();
+    setRange(RANGES[next]);
+    tabRefs.current[next]?.focus();
+  };
 
   // Drive the chart from the data layer. Header values stay byte-identical to
   // the prototype loaded state — the mock OHLC generator is synthetic and not
@@ -45,15 +62,18 @@ export function HeroChart() {
           </div>
         </div>
         <div className="row gap-1" role="tablist" aria-label="Time range">
-          {RANGES.map((r) => {
+          {RANGES.map((r, i) => {
             const active = r === range;
             return (
               <button
                 key={r}
+                ref={(el) => { tabRefs.current[i] = el; }}
                 type="button"
                 role="tab"
                 aria-selected={active}
+                tabIndex={active ? 0 : -1}
                 onClick={() => setRange(r)}
+                onKeyDown={(e) => onTabKeyDown(e, i)}
                 className={'tab' + (active ? ' active' : '')}
                 style={{
                   padding: '4px 10px',
