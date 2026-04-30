@@ -8,6 +8,7 @@ import {
 } from 'react';
 
 import { getModels, setActiveAI } from '../data/ai';
+import { setRefreshInterval } from './refreshInterval';
 import type { AIModelsResponse, AIProvider } from '../data/types';
 
 export type ChartStyle = 'line' | 'candle' | 'area';
@@ -27,6 +28,8 @@ export interface Tweaks {
   aiProvider: AIProvider | null;
   /** Selected model id within the provider, or null for provider default. */
   aiModel: string | null;
+  /** Live-data polling interval in ms. 0 disables polling entirely. */
+  refreshInterval: number;
 }
 
 const DEFAULTS: Tweaks = {
@@ -40,6 +43,7 @@ const DEFAULTS: Tweaks = {
   currency: 'USD',
   aiProvider: null,
   aiModel: null,
+  refreshInterval: 10 * 60 * 1000, // 10 min default
 };
 
 const STORAGE_KEY = 'intelistock.tweaks.v1';
@@ -121,6 +125,11 @@ export function TweaksProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setActiveAI(values.aiProvider, values.aiModel);
   }, [values.aiProvider, values.aiModel]);
+
+  // Forward refresh interval into the global store so useAsync picks it up.
+  useEffect(() => {
+    setRefreshInterval(values.refreshInterval);
+  }, [values.refreshInterval]);
 
   const ctx = useMemo<TweaksContextValue>(
     () => ({

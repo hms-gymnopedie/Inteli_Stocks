@@ -6,12 +6,14 @@ import { Overview } from './pages/overview';
 import { Portfolio } from './pages/portfolio';
 import { GeoRisk } from './pages/geo';
 import { Detail } from './pages/detail';
+import { Settings } from './pages/settings';
 
 const NAV = [
-  { to: '/overview', label: 'Overview' },
+  { to: '/overview',  label: 'Overview'  },
   { to: '/portfolio', label: 'Portfolio' },
-  { to: '/geo', label: 'Geo Risk' },
-  { to: '/detail', label: 'Security' },
+  { to: '/geo',       label: 'Geo Risk'  },
+  { to: '/detail',    label: 'Security'  },
+  { to: '/settings',  label: 'Settings'  },
 ];
 
 function TopBar() {
@@ -58,6 +60,7 @@ export function App() {
              */}
             <Route path="/detail" element={<Detail />} />
             <Route path="/detail/:symbol" element={<Detail />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         </main>

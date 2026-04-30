@@ -6,6 +6,7 @@ import { security } from './routes/security.js';
 import { portfolio } from './routes/portfolio.js';
 import { macro } from './routes/macro.js';
 import { ai } from './routes/ai.js';
+import { settings } from './routes/settings.js';
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use('/api/security',  security);  // B2-MD + B2-SEC (filings)
 app.use('/api/portfolio', portfolio); // B2-MD
 app.use('/api/macro',     macro);     // B2-FRED
 app.use('/api/ai',        ai);        // B2-AI
+app.use('/api/settings',  settings);  // Settings page backend
 
 // --- Start ---
 const port = Number(process.env.PORT ?? 3001);

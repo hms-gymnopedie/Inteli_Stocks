@@ -26,3 +26,9 @@ export function client(): GoogleGenAI {
   }
   return _client;
 }
+
+/** Drop the cached client so the next call to client() rebuilds with the
+ *  current GEMINI_API_KEY. Called by /api/settings/keys PUT. */
+export function reset(): void {
+  _client = undefined;
+}

@@ -59,6 +59,14 @@ export function isConfigured(): boolean {
   return Boolean(process.env.FRED_API_KEY?.trim());
 }
 
+/** Drop cached responses so the next getCPI / getFedFunds call re-fetches
+ *  with the (possibly newly-set) FRED_API_KEY. Called by /api/settings/keys
+ *  PUT after rewriting .env. */
+export function reset(): void {
+  cpiCache.clear();
+  fedFundsCache.clear();
+}
+
 /**
  * Fetch up to `limit` observations for a FRED series, sorted descending
  * (most recent first).

@@ -42,3 +42,10 @@ export function client(): Anthropic {
   }
   return _client;
 }
+
+/** Drop the cached client so the next client() call rebuilds with whatever
+ *  process.env.ANTHROPIC_API_KEY currently holds. Used by /api/settings/keys
+ *  PUT after rewriting .env so the user doesn't need to restart the server. */
+export function reset(): void {
+  _client = undefined;
+}
