@@ -213,10 +213,15 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
     wake();
   });
 
-  es.addEventListener('error', (e) => {
-    error = new Error(`SSE error on ${url}: ${JSON.stringify(e)}`);
+  es.addEventListener('error', () => {
+    // EventSource auto-reconnects by spec on connection failure (every ~3s).
+    // We never want that here: if the proxy is down or backend 503's, we'd
+    // rather fall back to mock once than spam the network. Always close,
+    // and guard against the listener firing after we've already closed.
+    if (done) return;
+    try { es.close(); } catch { /* ignore */ }
+    error = new Error(`SSE error on ${url}`);
     done = true;
-    es.close();
     wake();
   });
 
@@ -240,7 +245,14 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
  * Tries the backend SSE endpoint first; falls back to mock on 503 / network error.
  */
 export async function* streamSignals(): AsyncIterable<AISignal> {
-  const url = `${AI_BASE}/signals?_=${Date.now()}${aiQuery()}`;
+  // SSE responses set Cache-Control: no-cache server-side, so no buster needed.
+  // A stable URL also lets EventSource's failure-state map cleanly to one
+  // close() call instead of N retries.
+  const params = new URLSearchParams();
+  if (activeProvider) params.set('provider', activeProvider);
+  if (activeModel)    params.set('model',    activeModel);
+  const qs = params.toString();
+  const url = `${AI_BASE}/signals${qs ? `?${qs}` : ''}`;
   // Probe the backend: if it returns 503 (no key), use mock immediately.
   try {
     const probe = await fetch(url, { method: 'HEAD' }).catch(
