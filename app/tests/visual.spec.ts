@@ -38,6 +38,7 @@ const ROUTES = [
   { name: 'geo', path: '/geo' },
   { name: 'detail-default', path: '/detail' },
   { name: 'detail-aapl', path: '/detail/AAPL' },
+  { name: 'settings', path: '/settings' },
 ] as const;
 
 /**
@@ -118,5 +119,29 @@ test.describe('Visual regression — routes × viewports', () => {
         });
       });
     }
+  }
+});
+
+test.describe('Visual regression — ⌘K modal overlay', () => {
+  for (const viewport of VIEWPORTS) {
+    test(`overview cmdk @ ${viewport.name}`, async ({ page }) => {
+      await preparePage(page, '/overview', viewport.width, viewport.height);
+      // Open the global ⌘K search modal. The SymbolSearch listener
+      // accepts either Meta+K (macOS) or Ctrl+K — Meta is canonical.
+      await page.keyboard.press('Meta+K');
+      // Wait for the modal node to mount + become visible. The modal
+      // is portalled to the App shell (not a separate overlay root).
+      const dialog = page.locator('[role="dialog"]');
+      await expect(dialog).toBeVisible();
+      // Re-freeze animations after the modal mounts: it ships its own
+      // backdrop blur transition that the earlier injection didn't
+      // cover for newly-inserted nodes.
+      await freezeAnimations(page);
+      await expect(page).toHaveScreenshot(`overview-cmdk-${viewport.name}.png`, {
+        fullPage: true,
+        animations: 'disabled',
+        maxDiffPixelRatio: 0.02,
+      });
+    });
   }
 });
