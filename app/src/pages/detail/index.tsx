@@ -8,6 +8,7 @@ import { EarningsGuidance } from './EarningsGuidance';
 import { Header } from './Header';
 import { MACDPanel } from './MACDPanel';
 import { MainChart, type StudyKey } from './MainChart';
+import { OptionsChainMini } from './OptionsChainMini';
 import { Peers } from './Peers';
 import { RSIPanel } from './RSIPanel';
 import { ValuationGrid } from './ValuationGrid';
@@ -94,6 +95,8 @@ export function Detail() {
           <DisclosuresFeed />
 
           <EarningsGuidance symbol={SYMBOL} />
+
+          <OptionsChainMini symbol={SYMBOL} />
         </main>
 
         <aside
