@@ -1444,3 +1444,71 @@ body .muted {
 }
 
 /* === END ACCESSIBILITY === */
+
+/* === NEW SECTIONS (B6) ====================================================
+   Slide-in RegionDrawer for Geo. The drawer is a fixed-position panel
+   anchored to the right edge of the viewport, sliding in from the right
+   when `.open` is added. Backdrop sits behind it and dims the page.
+   Mobile (<= 600px): drawer expands to full width.
+
+   The drawer mounts permanently in pages/geo/index.tsx with `pin === null`
+   so the slide animation runs on first open as well. When closed, the
+   panel is translateX(100%) (off-screen) and the backdrop is
+   pointer-events:none + opacity:0.
+   =========================================================================*/
+
+.region-drawer-backdrop {
+  position: fixed;
+  top: 44px;        /* below the topbar */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+  z-index: 30;
+}
+
+.region-drawer-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.region-drawer {
+  position: fixed;
+  top: 44px;        /* anchored below the topbar to match overlay style */
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background: var(--panel);
+  border-left: 1px solid var(--hairline);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 300ms ease;
+  z-index: 31;
+  visibility: hidden;
+}
+
+.region-drawer.open {
+  transform: translateX(0);
+  visibility: visible;
+}
+
+@media (max-width: 600px) {
+  .region-drawer {
+    width: 100%;
+    border-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .region-drawer,
+  .region-drawer-backdrop {
+    transition: none;
+  }
+}
+
+/* === END NEW SECTIONS (B6) === */
