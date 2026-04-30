@@ -276,3 +276,151 @@ describe('formatTime', () => {
     expect(formatTime(ms, { timeZone: 'Asia/Seoul', abbreviation: 'KST', seconds: false })).toBe('22:42 KST');
   });
 });
+
+// ---------------------------------------------------------------------------
+// formatDateShort
+// ---------------------------------------------------------------------------
+
+describe('formatDateShort', () => {
+  it('renders day + uppercase short month in UTC', () => {
+    expect(formatDateShort(new Date('2026-04-26T00:00:00Z'), { timeZone: 'UTC' })).toBe('26 APR');
+  });
+
+  it('uppercases the month and trims any trailing dot', () => {
+    // 2026-12-01 — December, "DEC". en-US "month: short" sometimes appends a
+    // dot in other locales but never in en-US. Verify there is no trailing dot.
+    const out = formatDateShort(new Date('2026-12-01T00:00:00Z'), { timeZone: 'UTC' });
+    expect(out).toBe('01 DEC');
+    expect(out.endsWith('.')).toBe(false);
+  });
+
+  it('respects timezone boundary at midnight UTC', () => {
+    // 2026-04-26T00:00:00Z is 2026-04-25T20:00:00 in NY → "25 APR".
+    expect(formatDateShort(new Date('2026-04-26T00:00:00Z'), { timeZone: 'America/New_York' })).toBe('25 APR');
+  });
+
+  it('accepts ISO string', () => {
+    expect(formatDateShort('2026-01-15T12:00:00Z', { timeZone: 'UTC' })).toBe('15 JAN');
+  });
+
+  it('accepts numeric ms input', () => {
+    const ms = Date.UTC(2026, 6, 4, 0, 0, 0); // 2026-07-04
+    expect(formatDateShort(ms, { timeZone: 'UTC' })).toBe('04 JUL');
+  });
+
+  it('produces a result for every English short month', () => {
+    const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    for (let m = 0; m < 12; m++) {
+      const ms = Date.UTC(2026, m, 15, 12, 0, 0);
+      expect(formatDateShort(ms, { timeZone: 'UTC' })).toBe(`15 ${months[m]}`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatCurrency
+// ---------------------------------------------------------------------------
+
+describe('formatCurrency', () => {
+  it('matches formatPrice(value, { currency }) for USD', () => {
+    expect(formatCurrency(924.19, 'USD')).toBe(formatPrice(924.19, { currency: 'USD' }));
+  });
+
+  it('matches formatPrice(value, { currency }) for KRW', () => {
+    expect(formatCurrency(72400, 'KRW')).toBe(formatPrice(72400, { currency: 'KRW' }));
+  });
+
+  it('threads decimals through to formatPrice', () => {
+    expect(formatCurrency(1.2345, 'USD', { decimals: 4 })).toBe(
+      formatPrice(1.2345, { currency: 'USD', decimals: 4 }),
+    );
+  });
+
+  it('threads locale through to formatPrice', () => {
+    expect(formatCurrency(1234.56, 'USD', { locale: 'de-DE' })).toBe(
+      formatPrice(1234.56, { currency: 'USD', locale: 'de-DE' }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatRange
+// ---------------------------------------------------------------------------
+
+describe('formatRange', () => {
+  it('passes through every Range union variant', () => {
+    const ranges: Range[] = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '5Y', 'MAX'];
+    for (const r of ranges) {
+      expect(formatRange(r)).toBe(r);
+    }
+  });
+
+  it('returns the literal value (centralisation hook)', () => {
+    expect(formatRange('3M')).toBe('3M');
+    expect(formatRange('YTD')).toBe('YTD');
+    expect(formatRange('MAX')).toBe('MAX');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatChange
+// ---------------------------------------------------------------------------
+
+describe('formatChange', () => {
+  it('formats positive abs and pct with plus signs', () => {
+    expect(formatChange(22.04, 0.42)).toBe('+22.04 (+0.42%)');
+  });
+
+  it('uses typographic minus for both halves on negatives', () => {
+    expect(formatChange(-5.12, -0.31)).toBe(`${MINUS}5.12 (${MINUS}0.31%)`);
+  });
+
+  it('handles mixed-sign abs/pct independently', () => {
+    expect(formatChange(-1, 2)).toBe(`${MINUS}1.00 (+2.00%)`);
+    expect(formatChange(3, -1.5)).toBe(`+3.00 (${MINUS}1.50%)`);
+  });
+
+  it('honours decimals override on both halves', () => {
+    expect(formatChange(22.04, 0.42, { decimals: 1 })).toBe('+22.0 (+0.4%)');
+    expect(formatChange(22.04, 0.42, { decimals: 3 })).toBe('+22.040 (+0.420%)');
+  });
+
+  it('typographic: false uses ASCII hyphen on both halves', () => {
+    expect(formatChange(-5.12, -0.31, { typographic: false })).toBe('-5.12 (-0.31%)');
+  });
+
+  it('zero abs/pct is unsigned', () => {
+    // signOf(0,...) returns ''. abs(0).toFixed(2) = '0.00'.
+    expect(formatChange(0, 0)).toBe('0.00 (0.00%)');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// formatWeight
+// ---------------------------------------------------------------------------
+
+describe('formatWeight', () => {
+  it('formats with one decimal by default', () => {
+    expect(formatWeight(12.4)).toBe('12.4%');
+    expect(formatWeight(0)).toBe('0.0%');
+    expect(formatWeight(100)).toBe('100.0%');
+  });
+
+  it('honours decimals override', () => {
+    expect(formatWeight(12.4, { decimals: 0 })).toBe('12%');
+    expect(formatWeight(12.456, { decimals: 2 })).toBe('12.46%');
+    expect(formatWeight(12.4, { decimals: 3 })).toBe('12.400%');
+  });
+
+  it('does not sign positive values (allocations are unsigned)', () => {
+    const out = formatWeight(12.4);
+    expect(out.startsWith('+')).toBe(false);
+    expect(out.startsWith(MINUS)).toBe(false);
+  });
+
+  it('passes negatives through with ASCII hyphen (toFixed default)', () => {
+    // formatWeight does not transform sign — relies on toFixed for negatives.
+    // This documents current behaviour: leading "-" is the JS-native ASCII one.
+    expect(formatWeight(-5.5)).toBe('-5.5%');
+  });
+});
