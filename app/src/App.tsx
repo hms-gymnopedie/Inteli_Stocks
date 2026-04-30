@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { FetchIndicator, LiveClock } from './lib/FetchIndicator';
 import { SymbolSearch } from './lib/SymbolSearch';
 import { TweaksPanel, TweaksProvider } from './lib/tweaks';
 import { Overview } from './pages/overview';
@@ -32,8 +33,8 @@ function TopBar() {
         ))}
       </nav>
       <div className="topbar-right">
-        <span>NY 09:42:18 · 26 APR</span>
-        <span className="chip dot">LIVE</span>
+        <FetchIndicator />
+        <LiveClock />
       </div>
     </header>
   );

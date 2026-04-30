@@ -4,6 +4,8 @@
 // unreachable, each function falls back to the inline mock implementation
 // so the UI keeps working locally without an API key.
 
+import { registerStream } from '../lib/fetchStatus';
+
 import type {
   AIInsight,
   AIModelsResponse,
@@ -186,10 +188,12 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
   // where EventSource is absent we fall back to the mock stream (caller handles).
   if (typeof EventSource === 'undefined') return;
 
+  const stream = registerStream(`SSE ${url.split('?')[0]}`);
   const es = new EventSource(url);
   const queue: T[] = [];
   let done = false;
   let error: Error | null = null;
+  let firstChunk = true;
 
   // Resolve / reject handles to wake the async generator
   let resolve: (() => void) | null = null;
@@ -201,6 +205,10 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
   es.addEventListener(eventName, (e: MessageEvent) => {
     try {
       queue.push(JSON.parse((e as MessageEvent).data) as T);
+      if (firstChunk) {
+        firstChunk = false;
+        stream.ok();
+      }
       wake();
     } catch {
       // malformed JSON from server — skip
@@ -210,6 +218,7 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
   es.addEventListener('done', () => {
     done = true;
     es.close();
+    stream.done();
     wake();
   });
 
@@ -222,6 +231,7 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
     try { es.close(); } catch { /* ignore */ }
     error = new Error(`SSE error on ${url}`);
     done = true;
+    stream.error('connection failed');
     wake();
   });
 

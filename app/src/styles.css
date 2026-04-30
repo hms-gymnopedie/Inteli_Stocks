@@ -125,6 +125,49 @@ body {
   color: var(--fg-3);
 }
 
+/* Fetch / SSE activity indicator next to the live clock */
+.fetch-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: help;
+  user-select: none;
+  transition: border-color 120ms ease;
+}
+
+.fetch-indicator.loading { border-color: var(--orange); color: var(--fg-2); }
+.fetch-indicator.err     { border-color: var(--down);   color: var(--down); }
+.fetch-indicator.live    { color: var(--fg-2); }
+.fetch-indicator.idle    { color: var(--fg-4); }
+
+.fetch-indicator-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.fetch-indicator-dot[data-pulsing='true'] {
+  animation: fetchPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes fetchPulse {
+  0%   { transform: scale(1);    opacity: 1;   box-shadow: 0 0 0 0   var(--orange-glow); }
+  60%  { transform: scale(1.25); opacity: 0.7; box-shadow: 0 0 0 6px transparent; }
+  100% { transform: scale(1);    opacity: 1;   box-shadow: 0 0 0 0   transparent; }
+}
+
+.fetch-indicator-label { white-space: nowrap; }
+
 .view {
   flex: 1;
   min-height: 0;
