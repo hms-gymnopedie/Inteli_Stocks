@@ -18,6 +18,7 @@ export function Overview() {
 
       {/* MAIN GRID */}
       <div
+        className="ov-grid"
         style={{
           flex: 1,
           display: 'grid',
@@ -43,6 +44,7 @@ export function Overview() {
 
         {/* CENTER */}
         <main
+          className="ov-main"
           style={{
             padding: 12,
             overflow: 'auto',
@@ -54,6 +56,7 @@ export function Overview() {
           <HeroChart />
 
           <div
+            className="ov-sector-row"
             style={{
               display: 'grid',
               gridTemplateColumns: '1.4fr 1fr',
