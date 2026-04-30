@@ -72,6 +72,7 @@ function TopBar() {
         id="primary-nav"
         className={navOpen ? 'nav is-open' : 'nav'}
         ref={navRef}
+        aria-label="Primary"
       >
         {NAV.map((n) => (
           <NavLink
@@ -97,8 +98,14 @@ export function App() {
   return (
     <TweaksProvider>
       <div className="shell">
+        {/* Skip-link — first focusable element on the page. Hidden off-screen
+            by .skip-link CSS until it receives keyboard focus, then jumps to
+            <main id="main"> below. WCAG 2.4.1 bypass-blocks. */}
+        <a href="#main" className="skip-link">
+          Skip to main content
+        </a>
         <TopBar />
-        <main className="view">
+        <main id="main" className="view" tabIndex={-1}>
           <Routes>
             <Route path="/" element={<Navigate to="/overview" replace />} />
             <Route path="/overview" element={<Overview />} />
