@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { streamInsights } from '../../data/ai';
 import type { AICategory, AIInsight } from '../../data/types';
@@ -21,6 +21,20 @@ export function AIInsightsFeed() {
   );
 
   const [filter, setFilter] = useState<AICategory | 'ALL'>('ALL');
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // ARIA tabs keyboard pattern — Left/Right cycle, Home/End jump.
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    let next = idx;
+    if (e.key === 'ArrowRight') next = (idx + 1) % CATEGORIES.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + CATEGORIES.length) % CATEGORIES.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = CATEGORIES.length - 1;
+    else return;
+    e.preventDefault();
+    setFilter(CATEGORIES[next].id);
+    tabRefs.current[next]?.focus();
+  };
 
   const visible = useMemo(
     () =>
@@ -65,27 +79,33 @@ export function AIInsightsFeed() {
           aria-label="Insight category filter"
           style={{ marginTop: 10, flexWrap: 'wrap' }}
         >
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat.id}
-              type="button"
-              role="tab"
-              aria-selected={filter === cat.id}
-              className={filter === cat.id ? 'tab active' : 'tab'}
-              style={{
-                padding: '3px 8px',
-                fontSize: 10,
-                fontFamily: 'var(--font-mono)',
-                letterSpacing: '0.06em',
-                background: filter === cat.id ? undefined : 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-              onClick={() => setFilter(cat.id)}
-            >
-              {cat.label}
-            </button>
-          ))}
+          {CATEGORIES.map((cat, i) => {
+            const active = filter === cat.id;
+            return (
+              <button
+                key={cat.id}
+                ref={(el) => { tabRefs.current[i] = el; }}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                tabIndex={active ? 0 : -1}
+                className={active ? 'tab active' : 'tab'}
+                style={{
+                  padding: '3px 8px',
+                  fontSize: 10,
+                  fontFamily: 'var(--font-mono)',
+                  letterSpacing: '0.06em',
+                  background: active ? undefined : 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setFilter(cat.id)}
+                onKeyDown={(e) => onTabKeyDown(e, i)}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
