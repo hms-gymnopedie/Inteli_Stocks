@@ -52,7 +52,7 @@ export function IndicesStrip() {
             key={row.ticker}
             type="button"
             onClick={() =>
-              navigate('/detail', { state: { symbol: row.ticker } })
+              navigate('/detail/' + encodeURIComponent(row.ticker))
             }
             style={{
               all: 'unset',
