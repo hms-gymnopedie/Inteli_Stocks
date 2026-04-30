@@ -46,7 +46,7 @@ export function MacroMonitor() {
       >
         {items.map((m, i) => (
           <div
-            key={m.key}
+            key={`${m.key}-${i}`}
             style={{
               borderLeft: i ? '1px solid var(--hairline)' : 0,
               paddingLeft: i ? 12 : 0,
