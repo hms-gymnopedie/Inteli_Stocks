@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { SymbolSearch } from './lib/SymbolSearch';
 import { TweaksPanel, TweaksProvider } from './lib/tweaks';
 import { Overview } from './pages/overview';
 import { Portfolio } from './pages/portfolio';
@@ -55,6 +56,8 @@ export function App() {
         </main>
       </div>
       <TweaksPanel />
+      {/* Global ⌘K symbol search — listens for the shortcut internally. */}
+      <SymbolSearch />
     </TweaksProvider>
   );
 }

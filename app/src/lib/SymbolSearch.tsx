@@ -1,13 +1,14 @@
 // Global ⌘K / Ctrl+K symbol search modal. Mounted once at the App shell so
-// the keyboard shortcut is always live. Pressing the shortcut toggles the
-// overlay; the input takes focus on open and Esc closes.
+// the keyboard shortcut is always live. Pressing ⌘K (Cmd+K on macOS,
+// Ctrl+K elsewhere) toggles the overlay; the input takes focus on open
+// and Esc closes.
 //
 // Future steps in B4-RT will:
 //  - debounce the query and call getSearch() (step 3)
 //  - render the results list with up/down highlight + Enter to navigate (step 3)
 //
-// For now (skeleton — step 1) the modal shows the input + a placeholder hint
-// so the visual + keyboard plumbing can be verified in isolation.
+// For now (steps 1+2) the modal shows the input + a placeholder hint so the
+// visual + keyboard plumbing can be verified in isolation.
 
 import { useEffect, useRef, useState } from 'react';
 
@@ -15,6 +16,20 @@ export function SymbolSearch() {
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+
+  // Global ⌘K / Ctrl+K toggle — always live (regardless of `open`) so the
+  // shortcut works from any page. preventDefault stops the browser's
+  // default behaviour (Firefox: address bar focus).
+  useEffect(() => {
+    const onShortcut = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, []);
 
   // Esc to close. Listener is attached only while open so we don't leak a
   // global handler across the rest of the app's keyboard interactions.
