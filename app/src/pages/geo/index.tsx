@@ -1,13 +1,20 @@
+import { useState } from 'react';
+
+import type { MapPin } from '../../data/types';
+
 import { AffectedPortfolio } from './AffectedPortfolio';
 import { AIHedgeSuggestion } from './AIHedgeSuggestion';
 import { GlobalRiskIndex } from './GlobalRiskIndex';
 import { Hotspots } from './Hotspots';
 import { LayerToggles } from './LayerToggles';
 import { LiveAlertCard } from './LiveAlertCard';
+import { RegionDrawer } from './RegionDrawer';
 import { RiskLegend } from './RiskLegend';
 import { WorldMap } from './WorldMap';
 
 export function GeoRisk() {
+  const [selectedPin, setSelectedPin] = useState<MapPin | null>(null);
+
   return (
     <div className="app-frame" style={{ fontSize: 12 }}>
       <div className="titlebar" style={{ padding: '6px 12px' }}>
@@ -44,7 +51,7 @@ export function GeoRisk() {
             borderRight: '1px solid var(--hairline)',
           }}
         >
-          <WorldMap />
+          <WorldMap onPinClick={setSelectedPin} />
 
           <GlobalRiskIndex />
 
@@ -80,6 +87,8 @@ export function GeoRisk() {
           <AIHedgeSuggestion />
         </aside>
       </div>
+
+      <RegionDrawer pin={selectedPin} onClose={() => setSelectedPin(null)} />
     </div>
   );
 }

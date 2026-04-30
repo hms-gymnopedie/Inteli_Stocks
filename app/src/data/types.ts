@@ -247,6 +247,30 @@ export interface MapLayer {
   enabled: boolean;
 }
 
+/** A single event entry in the RegionDrawer timeline. */
+export interface RegionEvent {
+  date: string;
+  headline: string;
+}
+
+/** A related ETF / instrument shown in the RegionDrawer body. */
+export interface RegionETF {
+  symbol: string;
+  /** Day percent change as a signed string (e.g. "+1.2%", "−0.4%"). */
+  dayPct: string;
+  direction: Direction;
+}
+
+/** Drawer detail payload returned by `geo.getRegionDetail(label)`. */
+export interface RegionDetail {
+  /** The label string the drawer was opened for (e.g. "TW · TENSION"). */
+  label: string;
+  /** 3-5 most recent events. */
+  events: RegionEvent[];
+  /** 3-5 related ETFs / instruments. */
+  etfs: RegionETF[];
+}
+
 // ─── Security / Detail ────────────────────────────────────────────────────────
 
 /** Security profile (header info). */
