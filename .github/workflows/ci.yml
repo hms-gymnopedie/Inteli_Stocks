@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # cache: npm uses the root package-lock.json (npm workspaces)
+          cache: npm
+
+      # npm workspaces: installs app/ and server/ deps in one shot
+      - name: Install dependencies
+        run: npm ci
+
+      # Root build script fans out: app (tsc -b + vite build) + server (tsc)
+      - name: Build
+        run: npm run build
+
+      # Install only chromium — lighter than full browser suite
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # Run smoke + interaction tests; skip visual.spec.ts whose baselines are
+      # macOS-snapshotted and will not match Linux rendering (font hinting,
+      # anti-aliasing). Both visual describe blocks start with "Visual regression"
+      # so a single --grep-invert string covers them.
+      - name: Functional E2E (skip visual regression)
+        run: npx playwright test --grep-invert "Visual regression"
+        working-directory: app
+
+      # Always upload the HTML report when any step fails so the flake is
+      # inspectable without re-running locally.
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: app/playwright-report/
+          retention-days: 7
