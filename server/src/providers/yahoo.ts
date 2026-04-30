@@ -1,21 +1,38 @@
 /**
- * yahoo.ts — thin wrapper around yahoo-finance2 with TTLCache.
+ * yahoo.ts — thin wrapper around yahoo-finance2 with TTLCache + LastGoodCache fallback.
  *
  * All external yahoo calls go through here so:
  *  - cache keys are consistent
- *  - error handling is centralised
+ *  - error handling is centralised (last-good fallback before throwing)
  *  - routes stay thin
+ *
+ * B2-MD2: bumped TTLs (quotes/search 300 s, historical/summary 600 s),
+ *         added per-function LastGoodCache so stale data is served on yahoo errors.
  */
 
 import YahooFinance from 'yahoo-finance2';
-import { TTLCache } from '../lib/cache.js';
+import { TTLCache, LastGoodCache } from '../lib/cache.js';
+
+// ─── TTL constants ─────────────────────────────────────────────────────────────
+
+/** 5 min: quotes + search (light, high call rate) */
+const QUOTES_TTL   = 300_000;
+/** 10 min: historical OHLC + quoteSummary (heavy, low call rate) */
+const HISTORY_TTL  = 600_000;
 
 // ─── Caches ───────────────────────────────────────────────────────────────────
 
-const quoteCache      = new TTLCache<ReturnType<typeof YahooFinance.prototype.quote>>(30_000);
-const historicalCache = new TTLCache<Awaited<ReturnType<typeof YahooFinance.prototype.historical>>>(60_000);
-const summaryCache    = new TTLCache<Awaited<ReturnType<typeof YahooFinance.prototype.quoteSummary>>>(60_000);
-const searchCache     = new TTLCache<Awaited<ReturnType<typeof YahooFinance.prototype.search>>>(30_000);
+const _quotesCache   = new TTLCache<Awaited<ReturnType<typeof yf.quote>>[]>(QUOTES_TTL);
+const _lgQuotes      = new LastGoodCache<Awaited<ReturnType<typeof yf.quote>>[]>();
+
+const _histCache     = new TTLCache<Awaited<ReturnType<typeof yf.historical>>>(HISTORY_TTL);
+const _lgHist        = new LastGoodCache<Awaited<ReturnType<typeof yf.historical>>>();
+
+const _summaryCache  = new TTLCache<Awaited<ReturnType<typeof yf.quoteSummary>>>(HISTORY_TTL);
+const _lgSummary     = new LastGoodCache<Awaited<ReturnType<typeof yf.quoteSummary>>>();
+
+const _searchCache   = new TTLCache<Awaited<ReturnType<typeof yf.search>>>(QUOTES_TTL);
+const _lgSearch      = new LastGoodCache<Awaited<ReturnType<typeof yf.search>>>();
 
 // Suppress noisy validation warnings from yahoo-finance2
 const yf = new YahooFinance({ validation: { logErrors: false, logOptionsErrors: false } });
@@ -92,52 +109,85 @@ function rangeToInterval(range: Range): '1d' | '1wk' | '1mo' {
   }
 }
 
+// ─── Internal TTL-cache helpers ───────────────────────────────────────────────
+
+/**
+ * Reads from a TTLCache without calling the loader.
+ * Returns undefined if the key is missing or expired.
+ */
+function peekTTL<T>(cache: TTLCache<T>, key: string): T | undefined {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const store = (cache as any).store as Map<string, { value: T; expiresAt: number }>;
+  const entry = store.get(key);
+  if (entry && Date.now() < entry.expiresAt) return entry.value;
+  return undefined;
+}
+
+/**
+ * Writes directly into a TTLCache store (bypasses the loader API).
+ */
+function pokeTTL<T>(cache: TTLCache<T>, key: string, value: T): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const store = (cache as any).store as Map<string, { value: T; expiresAt: number }>;
+  const ttlMs = (cache as unknown as { ttlMs: number }).ttlMs;
+  store.set(key, { value, expiresAt: Date.now() + ttlMs });
+}
+
 // ─── Exported helpers ──────────────────────────────────────────────────────────
 
 /**
- * Fetch quotes for one or more symbols, with caching.
- * Returns array of raw QuoteEquity objects from yahoo-finance2.
- */
-export async function getQuotes(symbols: string[]): Promise<Awaited<ReturnType<typeof yf.quote>>[]> {
-  const key = `quotes:${symbols.sort().join(',')}`;
-  // TTLCache is generic – for arrays we need a single-element cache per call.
-  // Wrapping the array as a single cache entry is fine.
-  const cache = new TTLCache<Awaited<ReturnType<typeof yf.quote>>[]>(30_000);
-  return cache.get(key, async () => {
-    if (symbols.length === 1) {
-      const q = await yf.quote(symbols[0]);
-      return [q] as Awaited<ReturnType<typeof yf.quote>>[];
-    }
-    const qs = await yf.quote(symbols);
-    return (Array.isArray(qs) ? qs : [qs]) as Awaited<ReturnType<typeof yf.quote>>[];
-  });
-}
-
-// Module-level quote cache (shared across calls)
-const _quotesCache = new TTLCache<Awaited<ReturnType<typeof yf.quote>>[]>(30_000);
-
-/**
- * Fetch quotes with a shared module-level cache instance.
+ * Fetch quotes for one or more symbols, with TTL + last-good fallback.
+ * On Yahoo error: serves stale last-good if available, otherwise throws.
  */
 export async function fetchQuotes(symbols: string[]): Promise<Awaited<ReturnType<typeof yf.quote>>[]> {
   const key = `quotes:${[...symbols].sort().join(',')}`;
-  return _quotesCache.get(key, async () => {
+
+  // Check TTL cache first
+  const fresh = peekTTL(_quotesCache, key);
+  if (fresh) return fresh;
+
+  // Attempt to fetch from Yahoo
+  try {
     const result = await yf.quote(symbols);
-    return (Array.isArray(result) ? result : [result]) as Awaited<ReturnType<typeof yf.quote>>[];
-  });
+    const quotes = (Array.isArray(result) ? result : [result]) as Awaited<ReturnType<typeof yf.quote>>[];
+    pokeTTL(_quotesCache, key, quotes);
+    _lgQuotes.set(key, quotes);
+    return quotes;
+  } catch (err) {
+    const stale = _lgQuotes.get(key);
+    if (stale !== undefined) {
+      console.warn(`[B2-MD2] fetchQuotes: yahoo error, serving stale last-good for key="${key}"`);
+      return stale;
+    }
+    throw err;
+  }
 }
 
 /**
- * Fetch OHLC historical data for a symbol and range.
+ * Fetch OHLC historical data for a symbol and range, with TTL + last-good fallback.
  */
 export async function fetchHistorical(symbol: string, range: Range) {
   const key = `historical:${symbol}:${range}`;
-  return historicalCache.get(key, () =>
-    yf.historical(symbol, {
+
+  const fresh = peekTTL(_histCache, key);
+  if (fresh) return fresh;
+
+  try {
+    const rows = await yf.historical(symbol, {
       period1:  rangeToPeriod1(range),
       interval: rangeToInterval(range),
-    })
-  );
+    });
+    pokeTTL(_histCache, key, rows);
+    _lgHist.set(key, rows);
+    return rows;
+  } catch (err) {
+    const stale = _lgHist.get(key);
+    if (stale !== undefined) {
+      console.warn(`[B2-MD2] fetchHistorical: yahoo error, serving stale last-good for key="${key}"`);
+      return stale;
+    }
+    throw err;
+  }
 }
 
 // Valid module names as a union literal — matches QuoteSummaryModules from yahoo-finance2.
@@ -148,25 +198,55 @@ type QSModule =
   | 'upgradeDowngradeHistory' | 'secFilings' | 'majorHoldersBreakdown';
 
 /**
- * Fetch quoteSummary modules for a symbol.
+ * Fetch quoteSummary modules for a symbol, with TTL + last-good fallback.
  */
 export async function fetchQuoteSummary(
   symbol: string,
   modules: QSModule[]
 ): Promise<Awaited<ReturnType<typeof yf.quoteSummary>>> {
   const key = `summary:${symbol}:${[...modules].sort().join(',')}`;
-  return summaryCache.get(key, () =>
+
+  const fresh = peekTTL(_summaryCache, key);
+  if (fresh) return fresh;
+
+  try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    yf.quoteSummary(symbol, { modules: modules as any })
-  );
+    const result = await yf.quoteSummary(symbol, { modules: modules as any });
+    pokeTTL(_summaryCache, key, result);
+    _lgSummary.set(key, result);
+    return result;
+  } catch (err) {
+    const stale = _lgSummary.get(key);
+    if (stale !== undefined) {
+      console.warn(`[B2-MD2] fetchQuoteSummary: yahoo error, serving stale last-good for key="${key}"`);
+      return stale;
+    }
+    throw err;
+  }
 }
 
 /**
- * Symbol search.
+ * Symbol search, with TTL + last-good fallback.
  */
 export async function fetchSearch(query: string): Promise<Awaited<ReturnType<typeof yf.search>>> {
   const key = `search:${query.toLowerCase()}`;
-  return searchCache.get(key, () => yf.search(query));
+
+  const fresh = peekTTL(_searchCache, key);
+  if (fresh) return fresh;
+
+  try {
+    const result = await yf.search(query);
+    pokeTTL(_searchCache, key, result);
+    _lgSearch.set(key, result);
+    return result;
+  } catch (err) {
+    const stale = _lgSearch.get(key);
+    if (stale !== undefined) {
+      console.warn(`[B2-MD2] fetchSearch: yahoo error, serving stale last-good for key="${key}"`);
+      return stale;
+    }
+    throw err;
+  }
 }
 
 /**
