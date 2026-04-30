@@ -1132,14 +1132,23 @@ body {
     grid-template-columns: 1fr 1fr !important;
   }
 
-  /* Detail header: let the price/verdict row wrap. */
-  .dt-header {
+  /* Detail header: let the price/verdict block drop below the title.
+     Header.tsx renders `<div style={display:grid; 1fr auto}>` as its
+     root — the wrapper lets us reach it. The right cluster
+     (`.row.gap-5.center`) is the price/verdict/actions group; we let
+     it wrap. */
+  .dt-header-wrap > div {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
   }
-  .dt-header-actions {
+  .dt-header-wrap .row.gap-5.center {
     flex-wrap: wrap !important;
     gap: 14px !important;
+    row-gap: 10px !important;
+  }
+  /* The vertical divider inside the header collapses on stacked layout. */
+  .dt-header-wrap .wf-divider-v {
+    display: none !important;
   }
 }
 
@@ -1218,11 +1227,13 @@ body {
   }
   .topbar .brand { font-size: 10px; gap: 6px; }
   .topbar-right { gap: 6px; }
-  .live-clock { display: none; } /* fall back to system clock */
+  /* LiveClock renders a bare <span> at the end of .topbar-right. Hide
+     it on tiny screens — system clock is right above. */
+  .topbar-right > span:last-child { display: none; }
 
   /* Page paddings tighten. */
   .ov-main, .pf-main, .dt-main { padding: 10px !important; gap: 10px !important; }
-  .pf-aside, .dt-aside { padding: 10px !important; }
+  .pf-aside-wrap > aside, .dt-aside { padding: 10px !important; }
 
   /* KPI strip stays 2-col but tightens — NAV column wraps onto first row
      because the .wf-panel-flat children are now in a single column. */
@@ -1269,9 +1280,12 @@ body {
     border-top: 1px solid var(--hairline);
   }
 
-  /* Detail header: action buttons wrap, divider collapses. */
-  .dt-header-actions .wf-divider-v { display: none; }
-  .dt-price-block { font-size: 22px !important; }
+  /* Detail header: shrink the price block on tight widths. Header.tsx
+     uses inline {fontSize:30} on a single `.wf-num` inside the right
+     cluster — `.row.gap-5.center .wf-num` targets only that node. */
+  .dt-header-wrap .row.gap-5.center .wf-num {
+    font-size: 22px !important;
+  }
 
   /* Settings: reduce padding. */
   .settings-page { padding: 16px 12px 80px; }

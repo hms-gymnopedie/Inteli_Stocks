@@ -38,9 +38,14 @@ export function Detail() {
 
   return (
     <div className="app-frame" style={{ fontSize: 12 }}>
-      <Header symbol={SYMBOL} />
+      {/* Header is a section component — wrap it so CSS can reach the
+          inline 1fr/auto grid inside without editing Header.tsx. */}
+      <div className="dt-header-wrap">
+        <Header symbol={SYMBOL} />
+      </div>
 
       <div
+        className="dt-grid"
         style={{
           flex: 1,
           display: 'grid',
@@ -49,6 +54,7 @@ export function Detail() {
         }}
       >
         <main
+          className="dt-main"
           style={{
             padding: 14,
             overflow: 'auto',
@@ -65,6 +71,7 @@ export function Detail() {
 
           {(studies.has('RSI') || studies.has('MACD')) && (
             <div
+              className="dt-rsi-macd-row"
               style={{
                 display: 'grid',
                 gridTemplateColumns:
@@ -77,12 +84,17 @@ export function Detail() {
             </div>
           )}
 
-          <ValuationGrid symbol={SYMBOL} />
+          {/* Valuation grid lives inside ValuationGrid.tsx as repeat(6, 1fr).
+              Wrap so responsive CSS can override the inner template. */}
+          <div className="dt-valuation-wrap">
+            <ValuationGrid symbol={SYMBOL} />
+          </div>
 
           <DisclosuresFeed />
         </main>
 
         <aside
+          className="dt-aside"
           style={{
             borderLeft: '1px solid var(--hairline)',
             padding: 14,

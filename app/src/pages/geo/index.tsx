@@ -20,7 +20,7 @@ export function GeoRisk() {
           GEOPOLITICAL RISK MONITOR
         </div>
         <div style={{ flex: 1 }} />
-        <div className="row gap-2">
+        <div className="row gap-2 geo-titlebar-chips">
           <span className="chip">GLOBAL</span>
           <span className="chip">REGIONS</span>
           <span className="chip active">RISK MAP</span>
@@ -29,6 +29,7 @@ export function GeoRisk() {
       </div>
 
       <div
+        className="geo-grid"
         style={{
           flex: 1,
           display: 'grid',
@@ -37,6 +38,7 @@ export function GeoRisk() {
         }}
       >
         <div
+          className="geo-map-wrap"
           style={{
             position: 'relative',
             borderRight: '1px solid var(--hairline)',
@@ -47,6 +49,7 @@ export function GeoRisk() {
           <GlobalRiskIndex />
 
           <div
+            className="geo-overlays"
             style={{
               position: 'absolute',
               top: 14,
@@ -65,6 +68,7 @@ export function GeoRisk() {
         </div>
 
         <aside
+          className="geo-aside"
           style={{
             display: 'flex',
             flexDirection: 'column',
