@@ -3,19 +3,30 @@
 // Ctrl+K elsewhere) toggles the overlay; the input takes focus on open
 // and Esc closes.
 //
-// Future steps in B4-RT will:
-//  - debounce the query and call getSearch() (step 3)
-//  - render the results list with up/down highlight + Enter to navigate (step 3)
+// On query change the input debounces 200 ms then calls getSearch(q). Up
+// to MAX_RESULTS results are listed; Up/Down moves the highlight, Enter
+// (or click) navigates to /detail/<symbol> and closes the modal.
 //
-// For now (steps 1+2) the modal shows the input + a placeholder hint so the
-// visual + keyboard plumbing can be verified in isolation.
+// Step 4 will land the matching `/detail/:symbol?` route.
 
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getSearch } from '../data/market';
+import type { SearchResult } from '../data/types';
+
+const DEBOUNCE_MS = 200;
+const MAX_RESULTS = 8;
 
 export function SymbolSearch() {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [active, setActive] = useState(0);
+
   const inputRef = useRef<HTMLInputElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const navigate = useNavigate();
 
   // Global ⌘K / Ctrl+K toggle — always live (regardless of `open`) so the
   // shortcut works from any page. preventDefault stops the browser's
@@ -31,24 +42,20 @@ export function SymbolSearch() {
     return () => window.removeEventListener('keydown', onShortcut);
   }, []);
 
-  // Esc to close. Listener is attached only while open so we don't leak a
-  // global handler across the rest of the app's keyboard interactions.
+  // Reset transient state whenever the modal closes — opening fresh next
+  // time avoids stale highlights and stale results flashing in.
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setOpen(false);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    if (!open) {
+      setQuery('');
+      setResults([]);
+      setActive(0);
+      setLoading(false);
+    }
   }, [open]);
 
   // Focus the input when the modal opens.
   useEffect(() => {
     if (open) {
-      // Defer one frame so the element exists when we focus.
       const id = window.requestAnimationFrame(() => {
         inputRef.current?.focus();
       });
@@ -56,12 +63,90 @@ export function SymbolSearch() {
     }
   }, [open]);
 
+  // Debounced search. Empty query → no fetch, just clear. We track an
+  // in-flight token so a slow earlier response can't clobber a faster
+  // later one (race condition when typing quickly).
+  useEffect(() => {
+    if (!open) return;
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      try {
+        const rows = await getSearch(trimmed);
+        if (cancelled) return;
+        setResults(rows.slice(0, MAX_RESULTS));
+        setActive(0);
+      } catch {
+        if (cancelled) return;
+        setResults([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [query, open]);
+
+  const close = () => setOpen(false);
+
+  const navigateToSymbol = (symbol: string) => {
+    navigate('/detail/' + encodeURIComponent(symbol));
+    close();
+  };
+
+  // Key handling on the input itself: Esc + arrows + Enter. Esc on the
+  // window is also wired (below) so the modal closes even if the input
+  // somehow loses focus.
+  const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (results.length === 0) return;
+      setActive((i) => (i + 1) % results.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (results.length === 0) return;
+      setActive((i) => (i - 1 + results.length) % results.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const row = results[active];
+      if (row) navigateToSymbol(row.symbol);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+    }
+  };
+
+  // Backstop Esc listener (window-scoped) — covers the case where focus
+  // somehow escaped the input. Only mounted while open.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
   // Click outside the panel closes the overlay.
   const onOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === overlayRef.current) setOpen(false);
+    if (e.target === overlayRef.current) close();
   };
 
   if (!open) return null;
+
+  const trimmed = query.trim();
+  const showResults = trimmed.length > 0;
 
   return (
     <div
@@ -85,19 +170,71 @@ export function SymbolSearch() {
             placeholder="Search a symbol or company…"
             autoComplete="off"
             spellCheck={false}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={onInputKeyDown}
+            aria-label="Symbol search input"
+            aria-autocomplete="list"
+            aria-controls="symsearch-listbox"
+            aria-activedescendant={
+              showResults && results[active]
+                ? `symsearch-row-${results[active].symbol}`
+                : undefined
+            }
           />
           <button
             type="button"
             className="symsearch-esc"
-            onClick={() => setOpen(false)}
+            onClick={close}
             aria-label="Close search"
           >
             Esc
           </button>
         </div>
-        <div className="symsearch-hint">
-          Press <kbd>Esc</kbd> to close.
-        </div>
+
+        {showResults ? (
+          loading && results.length === 0 ? (
+            <div className="symsearch-loading">
+              Searching<span className="symsearch-loading-dots" />
+            </div>
+          ) : results.length === 0 ? (
+            <div className="symsearch-empty">No results for “{trimmed}”.</div>
+          ) : (
+            <ul
+              id="symsearch-listbox"
+              className="symsearch-results"
+              role="listbox"
+              aria-label="Search results"
+            >
+              {results.map((r, i) => (
+                <li key={r.symbol} role="presentation">
+                  <button
+                    type="button"
+                    id={`symsearch-row-${r.symbol}`}
+                    className={
+                      'symsearch-result' + (i === active ? ' is-active' : '')
+                    }
+                    role="option"
+                    aria-selected={i === active}
+                    onMouseEnter={() => setActive(i)}
+                    onClick={() => navigateToSymbol(r.symbol)}
+                  >
+                    <span className="symsearch-result-symbol">{r.symbol}</span>
+                    <span className="symsearch-result-name">{r.name}</span>
+                    <span className="symsearch-result-exchange">
+                      {r.exchange}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (
+          <div className="symsearch-hint">
+            Type a symbol or company name. <kbd>↑</kbd>/<kbd>↓</kbd> to
+            navigate, <kbd>Enter</kbd> to open, <kbd>Esc</kbd> to close.
+          </div>
+        )}
       </div>
     </div>
   );
