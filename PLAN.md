@@ -164,10 +164,10 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 | ID | Task | 파일 | Agent | Status | Blocks/by | Notes |
 |---|---|---|---|---|---|---|
-| B3-OV-AI | Overview AISignals + Sentiment | `pages/overview/AISignals.tsx`, `Sentiment.tsx` | frontend-ui-integrator + claude-api | ⬜ | by B2-AI | |
-| B3-PF-AI | Portfolio AIInsightsFeed | `pages/portfolio/AIInsightsFeed.tsx` | frontend-ui-integrator + claude-api | ⬜ | by B2-AI | |
-| B3-GE-AI | Geo AIHedgeSuggestion + LiveAlerts | `pages/geo/AIHedge.tsx`, `LiveAlerts.tsx` | frontend-ui-integrator + claude-api | ⬜ | by B2-AI | |
-| B3-DT-AI | Detail AIInvestmentGuide + Disclosure 요약 | `pages/detail/AIGuide.tsx`, `Disclosures.tsx` | frontend-ui-integrator + claude-api | ⬜ | by B2-AI | |
+| B3-OV-AI | Overview AISignals + Sentiment | `pages/overview/AISignals.tsx`, `Sentiment.tsx` | frontend-ui-integrator + claude-api | ✅ | by B2-AI | AISignals → `useAsyncStream(streamSignals)` (`c6671cc`); Sentiment → `useAsync(getFearGreed)` (folded into B2-MD2 `94c8729` via staging-bleed). Skeletons dim while streams warm up; SSE→Gemini fallback verified via 503-on-HEAD probe inside `data/ai.ts`. |
+| B3-PF-AI | Portfolio AIInsightsFeed | `pages/portfolio/AIInsightsFeed.tsx` | frontend-ui-integrator + claude-api | ✅ | by B2-AI | `e639e41` — `useAsyncStream(streamInsights('default'))` + ALL/OPP/RISK/MACRO/EARNINGS chip filter, header chip toggles WAIT↔N NEW. 3 dimmed skeleton cards while warming; empty-filter shows muted msg. |
+| B3-GE-AI | Geo AIHedgeSuggestion + LiveAlerts | `pages/geo/AIHedgeSuggestion.tsx`, `LiveAlertCard.tsx` | frontend-ui-integrator + claude-api | ✅ | by B2-AI | LiveAlertCard → `useAsyncStream(streamAlerts)` (`1f141f3`), AIHedgeSuggestion → `useAsync(proposeHedge('semis-heavy…Taiwan-tension'))` (`26b03b8`). Card always shows latest alert; "N alerts in feed" tail when >1. Hedge description accent-colors `expectedDrawdownTrim` substring. |
+| B3-DT-AI | Detail AIInvestmentGuide + Disclosure 요약 | `pages/detail/AIInvestmentGuide.tsx`, `DisclosuresFeed.tsx` | frontend-ui-integrator + claude-api | ✅ | by B2-AI | AIInvestmentGuide → `useAsync(getVerdict(symbol))` (`4f37303`); DisclosuresFeed → `useAsync(getFilings(symbol))` (`9fc7632`). Both accept optional `symbol?: string` prop with `'NVDA'` default — keeps pre-B4-RT `index.tsx` building until B4-RT plugs `useParams()` through. Empty filings show "No filings on record for {symbol}". |
 
 ### 배치 B4 — 횡단 관심사 (B1·B2 끝나면 병렬)
 
