@@ -28,6 +28,14 @@ function shortLabel(label: string): string {
   return label.replace(/^\/?api\//, '').replace(/^SSE\s+\/?api\//, '');
 }
 
+/** "5s ago" / "12m ago" / "2h ago" — coarse but compact. */
+function formatAge(seconds: number): string {
+  if (seconds < 60)    return `${seconds}s ago`;
+  if (seconds < 3600)  return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
 export function FetchIndicator() {
   const { pending, completed, errors, lastError, lastSuccess, total } =
     useFetchStatus();
@@ -54,21 +62,30 @@ export function FetchIndicator() {
   let dotColor: string;
   let label: string;
 
+  // "(Xs ago)" suffix sourced from the last successful response.
+  const lastReceivedSuffix =
+    successAge != null ? ` (${formatAge(successAge)})` : '';
+  // "(Xs ago)" suffix from the last error, used in the err state.
+  const lastErrorSuffix =
+    errorAge != null ? ` (${formatAge(errorAge)})` : '';
+
   if (pending > 0) {
-    // Currently making N network calls — pulsing orange.
+    // Currently making N network calls — pulsing orange. Still show the
+    // most-recent receipt time so the user can tell when they last had
+    // data even mid-refresh.
     state = 'loading';
     dotColor = 'var(--orange)';
-    label = `Fetching ${pending}`;
+    label = `Fetching ${pending}${lastReceivedSuffix}`;
   } else if (errorRecent) {
     // The most recent activity (within the last 5 s) was an error.
     state = 'err';
     dotColor = 'var(--down)';
-    label = errors === 1 ? `Error` : `Errors ${errors}`;
+    label = (errors === 1 ? 'Error' : `Errors ${errors}`) + lastErrorSuffix;
   } else if (successAge != null) {
     // No requests in flight; we have at least one prior success → live & idle.
     state = 'live';
     dotColor = 'var(--up)';
-    label = `Live · ${completed} ok`;
+    label = `Live · ${completed} ok${lastReceivedSuffix}`;
   } else {
     // No activity yet (right after page load before the first fetch lands).
     state = 'idle';
