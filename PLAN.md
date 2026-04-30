@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-04-30 (B2-AI2 완료 — Gemini + 모델 스위처)
+**Last updated:** 2026-04-30 (B2-MD2 + B3 + B4-RT 병렬 완료 — Yahoo 안정화, AI UI 7섹션, /detail/:symbol + ⌘K)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -231,7 +231,13 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 - ✅ **Pre-Phase 0** — Vite+React+TS 스캐폴드 (commit `1445063`)
 - ✅ **§7 결정 잠금 (5/5)** (commit `f3773f3`)
 - ✅ **Phase 0 완료 (3/3)** — 0-A `316f97f` · 0-B `01dc917` · 0-C `ac08ef6`
-- ✅ **Phase 2 완료 (5/5: prep + MD + FRED + SEC + AI)** — 23 market+security+portfolio + 4 AI + 2 macro + 1 SEC filings endpoint. 프론트엔드 `data/*.ts` 본문 모두 fetch swap. ANTHROPIC_API_KEY/FRED_API_KEY 미설정 시 503 + mock fallback. 실데이터 백엔드로 E2E 13/13 통과 (3.5s). 실행: `npm run dev` (root) → Vite :5180 + Express :3001. 두 에이전트(B2-FRED, B2-SEC)가 permissions skill 늪에 빠져 메인이 마무리 커밋.
+- ✅ **Phase 2 완료 (5/5: prep + MD + FRED + SEC + AI)** — 23 market+security+portfolio + 4 AI + 2 macro + 1 SEC filings endpoint. 프론트엔드 `data/*.ts` 본문 모두 fetch swap.
+- ✅ **B2-AI2** — 멀티프로바이더 AI (Anthropic + Gemini) + 대시보드 Tweaks의 Provider/Model 셀렉트.
+- ✅ **B2-MD2** — Yahoo 안정화: TTL 30/60s → 300/600s, LastGoodCache + tryCache helper, market/security 모든 yahoo-기반 엔드포인트 500 → mock 200 fallback.
+- ✅ **B3 (4/4)** — AI 의존 UI 7섹션 모두 와이어링: AISignals/Sentiment, AIInsightsFeed (+ 카테고리 칩 필터), LiveAlertCard, AIHedgeSuggestion, AIInvestmentGuide, DisclosuresFeed.
+- ✅ **B4-RT** — `/detail/:symbol` 다이나믹 라우트 + 글로벌 ⌘K 심볼 검색 모달 (debounced getSearch, Up/Down/Enter, ARIA listbox).
+- 🟡 **B4-E2E** — **13/13 통과 in 3.9s** (Yahoo offline 시뮬레이션 OK, AI UI mock fallback OK, ⌘K 통합 OK). 잔여: 시각 회귀, A11y, 모바일 viewport, unit tests.
+- 실행: `npm run dev` (root) → Vite :5180 + Express :3001. ⌘K 검색·`/detail/<TICKER>` 직접 URL·Tweaks Provider 셀렉트 모두 동작.
 
 - ✅ **Phase 1 완료 (7/7)** — 두 라운드에 걸쳐 모두 완료:
   - B1-OV ✅ 9/9 · B1-PF ✅ 4/4 · B1-DT ✅ 7/7 · B1-GE ✅ 5/5
