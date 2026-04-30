@@ -1,5 +1,9 @@
 import { useEffect, useState, useSyncExternalStore, type DependencyList } from 'react';
-import { getRefreshInterval, subscribeRefresh } from './refreshInterval';
+import {
+  getManualRefreshTick,
+  getRefreshInterval,
+  subscribeRefresh,
+} from './refreshInterval';
 
 export interface AsyncState<T> {
   data: T | undefined;
@@ -26,6 +30,14 @@ function useGlobalRefreshInterval(): number {
   );
 }
 
+function useManualRefreshTick(): number {
+  return useSyncExternalStore(
+    subscribeRefresh,
+    getManualRefreshTick,
+    getManualRefreshTick,
+  );
+}
+
 /**
  * Minimal Promise→React-state adapter for the data layer's async fetchers.
  * Cancellation safe; supports background polling at the user-configured
@@ -43,10 +55,14 @@ export function useAsync<T>(
     error: undefined,
   });
   const globalInterval = useGlobalRefreshInterval();
+  const manualTick     = useManualRefreshTick();
   const intervalMs =
     poll === false ? 0
     : typeof poll === 'number' ? poll
     : globalInterval;
+  // Manual refresh applies even when poll is false — explicit user intent.
+  // (Static-data fetchers will refetch when the user presses Refresh, which
+  // is the expected behaviour.)
 
   useEffect(() => {
     let cancelled = false;
@@ -102,7 +118,7 @@ export function useAsync<T>(
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, intervalMs]);
+  }, [...deps, intervalMs, manualTick]);
 
   return state;
 }

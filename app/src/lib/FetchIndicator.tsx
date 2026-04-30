@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { useFetchStatus } from './fetchStatus';
+import { triggerManualRefresh } from './refreshInterval';
 import { useTweaks } from './tweaks';
 import { formatTime } from './format';
 
@@ -127,6 +128,35 @@ export function FetchIndicator() {
       />
       <span className="fetch-indicator-label">{label}</span>
     </span>
+  );
+}
+
+/**
+ * Topbar manual-refresh button. One click bumps a global counter that every
+ * `useAsync` watches and re-fires its fetcher in response. Disabled while
+ * any request is already in flight to prevent click-storms.
+ */
+export function RefreshButton() {
+  const { pending } = useFetchStatus();
+  const busy = pending > 0;
+  return (
+    <button
+      type="button"
+      className="refresh-btn"
+      onClick={triggerManualRefresh}
+      disabled={busy}
+      aria-label="Refresh all data"
+      title={busy ? 'Refreshing…' : 'Refresh all data now'}
+    >
+      <span
+        className="refresh-btn-icon"
+        aria-hidden="true"
+        data-spinning={busy ? 'true' : undefined}
+      >
+        ↻
+      </span>
+      <span className="refresh-btn-label">Refresh</span>
+    </button>
   );
 }
 

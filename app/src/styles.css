@@ -168,6 +168,49 @@ body {
 
 .fetch-indicator-label { white-space: nowrap; }
 
+/* Topbar Refresh button — manual data refresh trigger */
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 11px 3px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.refresh-btn:hover:not(:disabled) { border-color: var(--orange); color: var(--fg); }
+.refresh-btn:active:not(:disabled) { background: var(--panel-3); }
+.refresh-btn:disabled {
+  cursor: progress;
+  color: var(--fg-3);
+  border-color: var(--hairline);
+}
+
+.refresh-btn-icon {
+  font-size: 12px;
+  line-height: 1;
+  display: inline-block;
+}
+
+.refresh-btn-icon[data-spinning='true'] {
+  animation: refreshSpin 0.9s linear infinite;
+  color: var(--orange);
+}
+
+@keyframes refreshSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.refresh-btn-label { white-space: nowrap; }
+
 /* ============================================================
    Settings page
    ============================================================ */

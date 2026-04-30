@@ -1,5 +1,5 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
-import { FetchIndicator, LiveClock } from './lib/FetchIndicator';
+import { FetchIndicator, LiveClock, RefreshButton } from './lib/FetchIndicator';
 import { SymbolSearch } from './lib/SymbolSearch';
 import { TweaksPanel, TweaksProvider } from './lib/tweaks';
 import { Overview } from './pages/overview';
@@ -36,6 +36,7 @@ function TopBar() {
       </nav>
       <div className="topbar-right">
         <FetchIndicator />
+        <RefreshButton />
         <LiveClock />
       </div>
     </header>
