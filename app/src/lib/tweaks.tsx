@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -10,6 +11,7 @@ import {
 import { getModels, setActiveAI } from '../data/ai';
 import { setRefreshInterval } from './refreshInterval';
 import type { AIModelsResponse, AIProvider } from '../data/types';
+import { useFocusTrap } from './useFocusTrap';
 
 export type ChartStyle = 'line' | 'candle' | 'area';
 export type MapStyle = 'satellite' | 'terrain' | 'mono';
@@ -210,14 +212,19 @@ function TweakToggle({
   value: boolean;
   onChange: (v: boolean) => void;
 }) {
+  // role="switch" + aria-checked is the canonical ARIA pattern for an
+  // on/off binary control (vs aria-pressed which is for "is this action
+  // currently being applied?"). Screen readers announce "switch on/off".
   return (
     <div className="tw-row">
       <label>{label}</label>
       <button
         type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
         className={`tw-toggle ${value ? 'on' : ''}`}
         onClick={() => onChange(!value)}
-        aria-pressed={value}
       />
     </div>
   );
@@ -316,6 +323,24 @@ const CURRENCY_OPTIONS: SelectOption[] = [
 export function TweaksPanel() {
   const [open, setOpen] = useState(false);
   const { values, setTweak, reset, aiCatalogue } = useTweaks();
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Trap focus inside the panel while open so Tab/Shift+Tab cycle through
+  // the tweak controls without leaking out into the page underneath.
+  useFocusTrap(panelRef, open);
+
+  // Esc closes the panel — keyboard parity with the symbol-search modal.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   // Provider dropdown — disabled options (no key configured) get a "(off)" hint.
   const providerOptions: SelectOption[] = aiCatalogue.providers.map((p) => ({
@@ -347,13 +372,21 @@ export function TweaksPanel() {
         type="button"
         className="tweaks-fab"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="tweaks-panel"
+        aria-label={open ? 'Close tweaks panel' : 'Open tweaks panel'}
       >
-        <span style={{ color: 'var(--orange)' }}>●</span>
+        <span style={{ color: 'var(--orange)' }} aria-hidden>●</span>
         {open ? 'Close Tweaks' : 'Tweaks'}
       </button>
       {open && (
         <div
+          ref={panelRef}
+          id="tweaks-panel"
           className="tweaks-panel"
+          role="dialog"
+          aria-label="Display tweaks"
+          tabIndex={-1}
           onPointerDown={(e) => e.stopPropagation()}
         >
           <div className="tw-section">
