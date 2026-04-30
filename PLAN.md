@@ -173,7 +173,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
-| B4-RT | Detail 라우트 다이나믹화 `/detail/:symbol` + ⌘K 검색 | `App.tsx`, `lib/SymbolSearch.tsx` | frontend-ui-integrator | ⬜ | |
+| B4-RT | Detail 라우트 다이나믹화 `/detail/:symbol` + ⌘K 검색 | `App.tsx`, `lib/SymbolSearch.tsx` | frontend-ui-integrator | 🟡 | |
 | B4-RS | 반응형/모바일 (현재 1100px 이하 sidebar 숨김 → 본격 대응) | 각 페이지 + `styles.css` | frontend-ui-integrator | ⬜ | |
 | B4-A11 | 접근성 (포커스 링, ARIA, 키보드 nav, 색대비) | 각 컴포넌트 | frontend-ui-integrator | ⬜ | |
 | B4-E2E | Playwright E2E (4 페이지 스모크 + 인터랙션) | `app/tests/*.spec.ts` | document-skills:webapp-testing | 🟡 | **부분** (commits `6840b00`, `da152e5`): 13 tests passing in 1.9s — 6 smoke (shell·4 routes·/api/health proxy) + 7 interactions (IndicesStrip click, HeroChart 1M, Portfolio sort+filter, Detail 1Y, Tweaks accent+density). webServer reuses `npm run dev`. Bug found+fixed: Allocation skeleton key 중복. **남은 작업: visual regression(B2-MD 이후), unit tests(format.ts), keyboard a11y, mobile viewport** |
