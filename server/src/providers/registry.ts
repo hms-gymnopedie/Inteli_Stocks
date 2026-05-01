@@ -112,14 +112,34 @@ export interface GenerateOpts {
   maxTokens?: number;
 }
 
+/** Provider-agnostic token usage metadata for one LLM call. */
+export interface AIUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  /** Anthropic cache-read OR Gemini cachedContentTokenCount. */
+  cachedReadTokens?: number;
+  /** Anthropic cache-write only — tokens written to the prompt cache. */
+  cachedWriteTokens?: number;
+}
+
+export interface AIGenerationResult {
+  text: string;
+  usage: AIUsage;
+  provider: AIProvider;
+  model: string;
+}
+
 /**
- * Run an LLM call and return the text response.
+ * Run an LLM call and return the text response + token usage.
  *
  * Anthropic: system block carries `cache_control: { type: 'ephemeral' }`
  * (claude-api skill pattern; ~5 min cache, ≥1024 tokens breakeven).
+ * Cache reads are billed at 10% of normal input tokens; cache writes at 25%
+ * surcharge. Both surfaced separately so the UI can show effective cost.
  *
- * Gemini: system + user are concatenated into a single content block. The
- * SDK auto-handles caching server-side for repeated identical prompts.
+ * Gemini: system + user are concatenated. `usageMetadata.cachedContentTokenCount`
+ * reports tokens served from Google's implicit prompt cache when present.
  */
 export async function generate({
   provider,
@@ -127,7 +147,7 @@ export async function generate({
   system,
   user,
   maxTokens = 1024,
-}: GenerateOpts): Promise<string> {
+}: GenerateOpts): Promise<AIGenerationResult> {
   if (provider === 'anthropic') {
     const message = await anthropic.client().messages.create({
       model,
@@ -138,7 +158,24 @@ export async function generate({
       messages: [{ role: 'user', content: user }],
     });
     const block = message.content[0];
-    return block && block.type === 'text' ? block.text : '';
+    const text = block && block.type === 'text' ? block.text : '';
+    const u = message.usage;
+    const inputTokens  = u.input_tokens  ?? 0;
+    const outputTokens = u.output_tokens ?? 0;
+    const cachedReadTokens  = u.cache_read_input_tokens     ?? undefined;
+    const cachedWriteTokens = u.cache_creation_input_tokens ?? undefined;
+    return {
+      text,
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        cachedReadTokens,
+        cachedWriteTokens,
+      },
+      provider,
+      model: message.model ?? model,
+    };
   }
 
   if (provider === 'gemini') {
@@ -147,7 +184,19 @@ export async function generate({
       contents: `${system}\n\n${user}`,
       config: { maxOutputTokens: maxTokens },
     });
-    return response.text ?? '';
+    const text = response.text ?? '';
+    const m = response.usageMetadata;
+    return {
+      text,
+      usage: {
+        inputTokens:      m?.promptTokenCount     ?? 0,
+        outputTokens:     m?.candidatesTokenCount ?? 0,
+        totalTokens:      m?.totalTokenCount      ?? 0,
+        cachedReadTokens: m?.cachedContentTokenCount ?? undefined,
+      },
+      provider,
+      model,
+    };
   }
 
   throw new Error(`Unknown AI provider: ${String(provider)}`);

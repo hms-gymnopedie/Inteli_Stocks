@@ -1,5 +1,6 @@
 import { streamSignals } from '../../data/ai';
-import type { AISignal } from '../../data/types';
+import type { AIMeta, AISignal } from '../../data/types';
+import { AITokenFooter } from '../../lib/AITokenFooter';
 import { formatTime } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
 import { useOnDemandStream } from '../../lib/useOnDemand';
@@ -18,7 +19,9 @@ export function AISignals() {
     : tz === 'Europe/London'   ? 'LDN'
     : 'UTC';
 
-  const stream = useOnDemandStream<AISignal>(() => streamSignals());
+  const stream = useOnDemandStream<AISignal, AIMeta>((onMeta) =>
+    streamSignals(onMeta),
+  );
 
   return (
     <div>
@@ -76,6 +79,10 @@ export function AISignals() {
           tzAbbrev={tzAbbrev}
         />
       ))}
+
+      {stream.items.length > 0 && stream.meta && (
+        <AITokenFooter meta={stream.meta} />
+      )}
     </div>
   );
 }

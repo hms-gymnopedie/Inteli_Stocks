@@ -84,33 +84,45 @@ export interface OnDemandStreamItem<T> {
   receivedAt: number;
 }
 
-export interface OnDemandStreamHandle<T> {
+export interface OnDemandStreamHandle<T, M = unknown> {
   items: OnDemandStreamItem<T>[];
   loading: boolean;
   error: Error | undefined;
   /** Last item's `receivedAt`, or null. */
   lastReceivedAt: number | null;
+  /** Stream-level metadata (e.g. AI token usage), set when the producer
+   *  emits it. The producer fn receives an `onMeta` callback as its only
+   *  argument; ignore it for streams that don't emit meta. */
+  meta: M | null;
   run: () => void;
   reset: () => void;
 }
 
-export function useOnDemandStream<T>(
-  fn: () => AsyncIterable<T>,
-): OnDemandStreamHandle<T> {
+export function useOnDemandStream<T, M = unknown>(
+  fn: (onMeta?: (m: M) => void) => AsyncIterable<T>,
+): OnDemandStreamHandle<T, M> {
   const [items, setItems] = useState<OnDemandStreamItem<T>[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | undefined>(undefined);
+  const [meta, setMeta] = useState<M | null>(null);
   const runIdRef = useRef(0);
 
   const run = useCallback(() => {
     const id = ++runIdRef.current;
     setItems([]);
     setError(undefined);
+    setMeta(null);
     setLoading(true);
+
+    const onMeta = (m: M): void => {
+      // Drop if a newer run started in the meantime.
+      if (id !== runIdRef.current) return;
+      setMeta(m);
+    };
 
     (async () => {
       try {
-        for await (const item of fn()) {
+        for await (const item of fn(onMeta)) {
           if (id !== runIdRef.current) return;
           setItems((prev) => [...prev, { data: item, receivedAt: Date.now() }]);
         }
@@ -127,11 +139,12 @@ export function useOnDemandStream<T>(
     runIdRef.current += 1;
     setItems([]);
     setError(undefined);
+    setMeta(null);
     setLoading(false);
   }, []);
 
   const lastReceivedAt =
     items.length > 0 ? items[items.length - 1].receivedAt : null;
 
-  return { items, loading, error, lastReceivedAt, run, reset };
+  return { items, loading, error, lastReceivedAt, meta, run, reset };
 }

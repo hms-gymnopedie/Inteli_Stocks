@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 
 import { streamInsights } from '../../data/ai';
-import type { AICategory, AIInsight } from '../../data/types';
+import type { AICategory, AIInsight, AIMeta } from '../../data/types';
+import { AITokenFooter } from '../../lib/AITokenFooter';
 import { formatTime } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
 import { useOnDemandStream } from '../../lib/useOnDemand';
@@ -27,7 +28,9 @@ export function AIInsightsFeed() {
     : tz === 'Europe/London'   ? 'LDN'
     : 'UTC';
 
-  const stream = useOnDemandStream<AIInsight>(() => streamInsights('default'));
+  const stream = useOnDemandStream<AIInsight, AIMeta>((onMeta) =>
+    streamInsights('default', onMeta),
+  );
 
   const [filter, setFilter] = useState<AICategory | 'ALL'>('ALL');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -177,6 +180,10 @@ export function AIInsightsFeed() {
             tzAbbrev={tzAbbrev}
           />
         ))}
+
+        {stream.items.length > 0 && stream.meta && (
+          <AITokenFooter meta={stream.meta} />
+        )}
       </div>
     </aside>
   );

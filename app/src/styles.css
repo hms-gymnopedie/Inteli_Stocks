@@ -2003,3 +2003,22 @@ svg [data-pin='true']:focus-visible {
   line-height: 1.5;
   text-align: center;
 }
+
+/* AI token usage footer (under each AI section's content) */
+.ai-token-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--fg-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: help;
+}
+.ai-token-footer.mock { color: var(--fg-4); font-style: italic; }
+.ai-token-numbers     { color: var(--fg-2); }
+.ai-token-divider     { color: var(--fg-4); }
+.ai-token-model       { color: var(--orange); text-transform: lowercase; }

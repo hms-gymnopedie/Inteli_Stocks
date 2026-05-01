@@ -1,5 +1,6 @@
 import { getVerdict } from '../../data/ai';
-import type { AIVerdict, ConvictionAxis } from '../../data/types';
+import type { AIResponse, AIVerdict, ConvictionAxis } from '../../data/types';
+import { AITokenFooter } from '../../lib/AITokenFooter';
 import { formatTime } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
 import { useOnDemand } from '../../lib/useOnDemand';
@@ -25,9 +26,11 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
     : tz === 'Europe/London'   ? 'LDN'
     : 'UTC';
 
-  const verdict = useOnDemand<AIVerdict>(() => getVerdict(symbol));
-  const axes = verdict.data?.axes ?? PLACEHOLDER_AXES;
-  const dimmed = !verdict.data ? { opacity: 0.5 } : undefined;
+  const verdict = useOnDemand<AIResponse<AIVerdict>>(() => getVerdict(symbol));
+  const result = verdict.data?.data;
+  const meta = verdict.data?.meta ?? null;
+  const axes = result?.axes ?? PLACEHOLDER_AXES;
+  const dimmed = !result ? { opacity: 0.5 } : undefined;
 
   return (
     <div>
@@ -67,11 +70,11 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
         aria-busy={verdict.loading}
       >
         <div className="wf-num" style={{ fontSize: 22 }}>
-          {verdict.data ? verdict.data.convictionScore : '—'}
+          {result ? result.convictionScore : '—'}
           <span className="muted-2" style={{ fontSize: 12 }}>/100</span>
         </div>
         <div className="wf-mini accent">
-          {verdict.data ? `CONVICTION · ${verdict.data.verdict}` : 'CONVICTION SCORE'}
+          {result ? `CONVICTION · ${result.verdict}` : 'CONVICTION SCORE'}
         </div>
         <div
           style={{
@@ -83,8 +86,8 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
         >
           {verdict.error
             ? `Generation failed: ${verdict.error.message}`
-            : verdict.data
-              ? verdict.data.summary
+            : result
+              ? result.summary
               : 'Click the button above to ask the AI for a verdict.'}
         </div>
         <hr className="wf-divider" style={{ margin: '10px 0' }} />
@@ -101,6 +104,7 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
             <AxisRow key={axis.label} axis={axis} />
           ))}
         </div>
+        {result && <AITokenFooter meta={meta} />}
       </div>
     </div>
   );

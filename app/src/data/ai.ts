@@ -8,13 +8,26 @@ import { registerStream } from '../lib/fetchStatus';
 
 import type {
   AIInsight,
+  AIMeta,
   AIModelsResponse,
   AIProvider,
+  AIResponse,
   AISignal,
   AIVerdict,
   ConvictionAxis,
   HedgeProposal,
 } from './types';
+
+/**
+ * Synthetic AIMeta returned alongside mock fallback data when the backend
+ * is offline / unconfigured. The UI treats meta.usage.totalTokens===0 as
+ * "no real call" and may suppress the token footer.
+ */
+const MOCK_META: AIMeta = {
+  provider: 'gemini',
+  model:    'mock',
+  usage:    { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+};
 
 // ─── API base ────────────────────────────────────────────────────────────────
 
@@ -183,7 +196,11 @@ async function* mockInsights(_portfolioId: string): AsyncIterable<AIInsight> {
  * T        — the type of data yielded per event
  * eventName — SSE event name to listen for (e.g. 'signal' or 'insight')
  */
-async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> {
+async function* consumeSSE<T>(
+  url: string,
+  eventName: string,
+  onMeta?: (meta: AIMeta) => void,
+): AsyncIterable<T> {
   // EventSource only works in browser environments. In SSR / test contexts
   // where EventSource is absent we fall back to the mock stream (caller handles).
   if (typeof EventSource === 'undefined') return;
@@ -212,6 +229,16 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
       wake();
     } catch {
       // malformed JSON from server — skip
+    }
+  });
+
+  // Token-usage event emitted by the server before 'done'.
+  es.addEventListener('meta', (e: MessageEvent) => {
+    try {
+      const meta = JSON.parse((e as MessageEvent).data) as AIMeta;
+      onMeta?.(meta);
+    } catch {
+      // ignore malformed meta — not critical
     }
   });
 
@@ -254,10 +281,10 @@ async function* consumeSSE<T>(url: string, eventName: string): AsyncIterable<T> 
  * Streams AI signal cards (overview right panel) as an AsyncIterable.
  * Tries the backend SSE endpoint first; falls back to mock on 503 / network error.
  */
-export async function* streamSignals(): AsyncIterable<AISignal> {
+export async function* streamSignals(
+  onMeta?: (meta: AIMeta) => void,
+): AsyncIterable<AISignal> {
   // SSE responses set Cache-Control: no-cache server-side, so no buster needed.
-  // A stable URL also lets EventSource's failure-state map cleanly to one
-  // close() call instead of N retries.
   const params = new URLSearchParams();
   if (activeProvider) params.set('provider', activeProvider);
   if (activeModel)    params.set('model',    activeModel);
@@ -268,20 +295,21 @@ export async function* streamSignals(): AsyncIterable<AISignal> {
     const probe = await fetch(url, { method: 'HEAD' }).catch(
       () => null,
     );
-    // HEAD on SSE endpoint may return 200 or 405 depending on Express version.
-    // A 503 means anthropic_not_configured → fallback.
     if (probe && probe.status === 503) {
+      onMeta?.(MOCK_META);
       yield* mockSignals();
       return;
     }
   } catch {
+    onMeta?.(MOCK_META);
     yield* mockSignals();
     return;
   }
 
   try {
-    yield* consumeSSE<AISignal>(url, 'signal');
+    yield* consumeSSE<AISignal>(url, 'signal', onMeta);
   } catch {
+    onMeta?.(MOCK_META);
     yield* mockSignals();
   }
 }
@@ -291,32 +319,38 @@ export async function* streamSignals(): AsyncIterable<AISignal> {
  * The `portfolioId` parameter is forwarded to the backend for scoping.
  * Falls back to mock on 503 / network error.
  */
-export async function* streamInsights(portfolioId: string): AsyncIterable<AIInsight> {
+export async function* streamInsights(
+  portfolioId: string,
+  onMeta?: (meta: AIMeta) => void,
+): AsyncIterable<AIInsight> {
   const url = `${AI_BASE}/insights?portfolioId=${encodeURIComponent(portfolioId)}${aiQuery()}`;
 
   try {
     const probe = await fetch(url, { method: 'HEAD' }).catch(() => null);
     if (probe && probe.status === 503) {
+      onMeta?.(MOCK_META);
       yield* mockInsights(portfolioId);
       return;
     }
   } catch {
+    onMeta?.(MOCK_META);
     yield* mockInsights(portfolioId);
     return;
   }
 
   try {
-    yield* consumeSSE<AIInsight>(url, 'insight');
+    yield* consumeSSE<AIInsight>(url, 'insight', onMeta);
   } catch {
+    onMeta?.(MOCK_META);
     yield* mockInsights(portfolioId);
   }
 }
 
 /**
- * Returns a hedge proposal for the given geo exposure string.
- * Falls back to mock on 503 / network error.
+ * Returns a hedge proposal for the given geo exposure string + AI usage meta.
+ * Falls back to mock on 503 / network error (mock meta has totalTokens=0).
  */
-export async function proposeHedge(exposure: string): Promise<HedgeProposal> {
+export async function proposeHedge(exposure: string): Promise<AIResponse<HedgeProposal>> {
   try {
     const res = await fetch(`${AI_BASE}/hedge`, {
       method:  'POST',
@@ -324,22 +358,26 @@ export async function proposeHedge(exposure: string): Promise<HedgeProposal> {
       body:    aiBody({ exposure }),
     });
     if (!res.ok) {
-      // 503 = not configured; anything else = upstream error → fallback
-      return MOCK_HEDGE_PROPOSAL;
+      return { data: MOCK_HEDGE_PROPOSAL, meta: MOCK_META };
     }
-    return (await res.json()) as HedgeProposal;
+    const json = (await res.json()) as AIResponse<HedgeProposal>;
+    // Defensive: server should return wrapped { data, meta }; if it accidentally
+    // returns the bare HedgeProposal we still want to surface something usable.
+    if (!json || typeof json !== 'object' || !('data' in json)) {
+      return { data: json as unknown as HedgeProposal, meta: MOCK_META };
+    }
+    return json;
   } catch {
     await delay();
-    return MOCK_HEDGE_PROPOSAL;
+    return { data: MOCK_HEDGE_PROPOSAL, meta: MOCK_META };
   }
 }
 
 /**
- * Returns the AI investment verdict (conviction score + 5-axis breakdown) for a symbol.
- * Falls back to mock data on 503 / network error.
- * Mock only has full data for NVDA; other symbols get a neutral placeholder.
+ * Returns the AI investment verdict for a symbol + AI usage meta.
+ * Falls back to mock data on 503 / network error (mock meta has totalTokens=0).
  */
-export async function getVerdict(symbol: string): Promise<AIVerdict> {
+export async function getVerdict(symbol: string): Promise<AIResponse<AIVerdict>> {
   try {
     const res = await fetch(`${AI_BASE}/verdict`, {
       method:  'POST',
@@ -347,12 +385,16 @@ export async function getVerdict(symbol: string): Promise<AIVerdict> {
       body:    aiBody({ symbol }),
     });
     if (!res.ok) {
-      return mockVerdict(symbol);
+      return { data: mockVerdict(symbol), meta: MOCK_META };
     }
-    return (await res.json()) as AIVerdict;
+    const json = (await res.json()) as AIResponse<AIVerdict>;
+    if (!json || typeof json !== 'object' || !('data' in json)) {
+      return { data: json as unknown as AIVerdict, meta: MOCK_META };
+    }
+    return json;
   } catch {
     await delay();
-    return mockVerdict(symbol);
+    return { data: mockVerdict(symbol), meta: MOCK_META };
   }
 }
 

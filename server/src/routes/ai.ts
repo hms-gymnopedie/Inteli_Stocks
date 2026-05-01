@@ -161,13 +161,16 @@ ai.post('/verdict', async (req: Request, res: Response) => {
   const model = resolveModel(provider, body.model);
 
   try {
-    const text = await generate({
+    const result = await generate({
       provider,
       model,
       system: VERDICT_SYSTEM,
       user:   `Analyze ${sym} and return the investment verdict JSON.`,
     });
-    res.json(parseJSON(text));
+    res.json({
+      data: parseJSON(result.text),
+      meta: { provider: result.provider, model: result.model, usage: result.usage },
+    });
   } catch (err) {
     console.error('[B2-AI] /verdict error:', err);
     res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
@@ -189,13 +192,16 @@ ai.post('/hedge', async (req: Request, res: Response) => {
   const model = resolveModel(provider, body.model);
 
   try {
-    const text = await generate({
+    const result = await generate({
       provider,
       model,
       system: HEDGE_SYSTEM,
       user:   `Portfolio exposure: ${body.exposure.trim()}\n\nReturn the hedge proposal JSON.`,
     });
-    res.json(parseJSON(text));
+    res.json({
+      data: parseJSON(result.text),
+      meta: { provider: result.provider, model: result.model, usage: result.usage },
+    });
   } catch (err) {
     console.error('[B2-AI] /hedge error:', err);
     res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
@@ -212,16 +218,22 @@ ai.get('/signals', async (req: Request, res: Response) => {
 
   sseHeaders(res);
   try {
-    const text = await generate({
+    const result = await generate({
       provider,
       model,
       system:    SIGNALS_SYSTEM,
       user:      'Emit current market signal cards as a JSON array (3-5 items).',
       maxTokens: 2048,
     });
-    const items = parseJSON<unknown[]>(text);
+    const items = parseJSON<unknown[]>(result.text);
     if (!Array.isArray(items)) throw new Error('signals: not an array');
     for (const item of items) sseEvent(res, 'signal', item);
+    // Emit a meta event with token usage so the client can show "Used N in / M out".
+    sseEvent(res, 'meta', {
+      provider: result.provider,
+      model:    result.model,
+      usage:    result.usage,
+    });
     sseDone(res);
   } catch (err) {
     console.error('[B2-AI] /signals error:', err);
@@ -241,16 +253,21 @@ ai.get('/insights', async (req: Request, res: Response) => {
 
   sseHeaders(res);
   try {
-    const text = await generate({
+    const result = await generate({
       provider,
       model,
       system:    INSIGHTS_SYSTEM,
       user:      `Emit insight cards for portfolio ${portfolioId} as a JSON array (3-5 items).`,
       maxTokens: 2048,
     });
-    const items = parseJSON<unknown[]>(text);
+    const items = parseJSON<unknown[]>(result.text);
     if (!Array.isArray(items)) throw new Error('insights: not an array');
     for (const item of items) sseEvent(res, 'insight', item);
+    sseEvent(res, 'meta', {
+      provider: result.provider,
+      model:    result.model,
+      usage:    result.usage,
+    });
     sseDone(res);
   } catch (err) {
     console.error('[B2-AI] /insights error:', err);

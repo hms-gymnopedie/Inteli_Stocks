@@ -1,5 +1,6 @@
 import { proposeHedge } from '../../data/ai';
-import type { HedgeProposal } from '../../data/types';
+import type { AIResponse, HedgeProposal } from '../../data/types';
+import { AITokenFooter } from '../../lib/AITokenFooter';
 import { formatTime } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
 import { useOnDemand } from '../../lib/useOnDemand';
@@ -15,8 +16,10 @@ export function AIHedgeSuggestion() {
     : tz === 'Europe/London'   ? 'LDN'
     : 'UTC';
 
-  const hedge = useOnDemand<HedgeProposal>(() => proposeHedge(EXPOSURE));
-  const dimmed = !hedge.data ? { opacity: 0.5 } : undefined;
+  const hedge = useOnDemand<AIResponse<HedgeProposal>>(() => proposeHedge(EXPOSURE));
+  const result = hedge.data?.data;
+  const meta = hedge.data?.meta ?? null;
+  const dimmed = !result ? { opacity: 0.5 } : undefined;
 
   return (
     <div style={{ padding: 14 }}>
@@ -68,8 +71,8 @@ export function AIHedgeSuggestion() {
             <span style={{ color: 'var(--down)' }}>
               Generation failed: {hedge.error.message}
             </span>
-          ) : hedge.data ? (
-            renderDescription(hedge.data)
+          ) : result ? (
+            renderDescription(result)
           ) : (
             <span style={{ color: 'var(--fg-3)' }}>
               Click the button above to ask the AI for a hedge proposal.
@@ -77,7 +80,7 @@ export function AIHedgeSuggestion() {
           )}
         </div>
         <div className="row gap-2" style={{ marginTop: 8 }}>
-          {(hedge.data?.actions ?? ['SIMULATE', 'DISMISS']).map((a, i) => (
+          {(result?.actions ?? ['SIMULATE', 'DISMISS']).map((a, i) => (
             <span
               key={a}
               className="tag"
@@ -91,6 +94,7 @@ export function AIHedgeSuggestion() {
             </span>
           ))}
         </div>
+        {result && <AITokenFooter meta={meta} />}
       </div>
     </div>
   );

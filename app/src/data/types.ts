@@ -388,6 +388,31 @@ export interface AIVerdict {
   axes: ConvictionAxis[];
 }
 
+// ─── AI usage / metadata (token tracking) ─────────────────────────────────────
+
+export interface AIUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  /** Cache-read input tokens (Anthropic cache_read_input_tokens / Gemini cachedContentTokenCount). */
+  cachedReadTokens?: number;
+  /** Cache-write input tokens (Anthropic only — first call that writes the cache). */
+  cachedWriteTokens?: number;
+}
+
+/** Provenance + usage for a single LLM response. */
+export interface AIMeta {
+  provider: AIProvider;
+  model: string;
+  usage: AIUsage;
+}
+
+/** Wrapper for AI fetcher results that carries the data + usage metadata. */
+export interface AIResponse<T> {
+  data: T;
+  meta: AIMeta;
+}
+
 // ─── AI provider catalogue (B2-AI2) ───────────────────────────────────────────
 
 /** AI provider id. Add new ones as the backend gains them. */
