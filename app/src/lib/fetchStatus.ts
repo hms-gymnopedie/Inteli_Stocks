@@ -15,6 +15,7 @@
  */
 
 import { useSyncExternalStore } from 'react';
+import { getSupabaseClient } from './auth';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -195,9 +196,42 @@ function installFetchPatch(): void {
       // to test 503 before opening EventSource — not worth showing).
       return orig(input, init);
     }
+
+    // ── B5-AU: inject Authorization header when a Supabase session is active ──
+    // We resolve the JWT lazily (getSession returns from in-memory cache so
+    // this adds no extra network round-trip). Only added if:
+    //   1. The Supabase browser client has been initialised (Supabase mode).
+    //   2. There is an active session.
+    //   3. The caller hasn't already set an Authorization header.
+    let patchedInit: RequestInit | undefined = init;
+    const sb = getSupabaseClient();
+    if (sb) {
+      try {
+        const { data } = await sb.auth.getSession();
+        const jwt = data.session?.access_token;
+        if (jwt) {
+          const existingAuth = (init?.headers instanceof Headers
+            ? init.headers.get('Authorization')
+            : (init?.headers as Record<string, string> | undefined)?.['Authorization'])
+            ?? null;
+          if (!existingAuth) {
+            patchedInit = {
+              ...init,
+              headers: {
+                ...(init?.headers as Record<string, string> | undefined),
+                Authorization: `Bearer ${jwt}`,
+              },
+            };
+          }
+        }
+      } catch {
+        // getSession failed — proceed without the header; server falls back to local mode
+      }
+    }
+
     const entry = startEntry('rest', label);
     try {
-      const res = await orig(input, init);
+      const res = await orig(input, patchedInit);
       completeEntry(entry, res.ok, `${res.status}`);
       return res;
     } catch (e) {
