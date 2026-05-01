@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { FetchIndicator, LiveClock, RefreshButton } from './lib/FetchIndicator';
 import { SymbolSearch } from './lib/SymbolSearch';
 import { TweaksPanel, TweaksProvider } from './lib/tweaks';
+import { AuthProvider, useAuth } from './lib/auth';
 import { Overview } from './pages/overview';
 import { Portfolio } from './pages/portfolio';
 import { GeoRisk } from './pages/geo';
 import { Detail } from './pages/detail';
 import { Settings } from './pages/settings';
+import { Login } from './pages/auth/Login';
 
 const NAV = [
   { to: '/overview',  label: 'Overview'  },
@@ -17,22 +19,61 @@ const NAV = [
   { to: '/settings',  label: 'Settings'  },
 ];
 
+// ─── Auth chip (shown in topbar when signed in via Supabase) ──────────────────
+
+function AuthChip() {
+  const { user, mode, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  if (mode !== 'supabase' || !user) return null;
+
+  const label = user.email ?? user.id.slice(0, 8);
+
+  return (
+    <div className="auth-chip" title={`Signed in as ${user.email ?? user.id}`}>
+      <span className="auth-chip-email">{label}</span>
+      <button
+        type="button"
+        className="auth-chip-signout"
+        aria-label="Sign out"
+        title="Sign out"
+        onClick={() => {
+          void signOut().then(() => { void navigate('/login', { replace: true }); });
+        }}
+      >
+        ↪
+      </button>
+    </div>
+  );
+}
+
+// ─── Route guard — redirects to /login when Supabase is configured but user is not authenticated ──
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { user, mode, loading } = useAuth();
+  const location = useLocation();
+
+  // Still fetching config — render nothing to avoid flash
+  if (loading) return null;
+
+  // Local mode or already authenticated — pass through
+  if (mode !== 'supabase' || user) return <>{children}</>;
+
+  // Supabase mode, not authenticated — redirect to /login
+  return <Navigate to="/login" state={{ from: location }} replace />;
+}
+
+// ─── TopBar ───────────────────────────────────────────────────────────────────
+
 function TopBar() {
-  // Mobile hamburger state — collapses the inline nav links into a dropdown
-  // below the bar at narrow widths. CSS (`.nav-toggle`, `.nav.is-open`) drives
-  // the actual show/hide via media queries; this local state just toggles the
-  // class so we don't rely on JS-side viewport detection.
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
   const navRef = useRef<HTMLElement | null>(null);
 
-  // Close the dropdown on route change so tapping a nav link doesn't leave the
-  // overlay sticky.
   useEffect(() => {
     setNavOpen(false);
   }, [location.pathname]);
 
-  // Close on Escape and on outside click for keyboard / pointer parity.
   useEffect(() => {
     if (!navOpen) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -88,44 +129,48 @@ function TopBar() {
       <div className="topbar-right">
         <FetchIndicator />
         <RefreshButton />
+        {/* Auth chip appears between Refresh and LiveClock in Supabase mode */}
+        <AuthChip />
         <LiveClock />
       </div>
     </header>
   );
 }
 
+// ─── App ──────────────────────────────────────────────────────────────────────
+
 export function App() {
   return (
     <TweaksProvider>
-      <div className="shell">
-        {/* Skip-link — first focusable element on the page. Hidden off-screen
-            by .skip-link CSS until it receives keyboard focus, then jumps to
-            <main id="main"> below. WCAG 2.4.1 bypass-blocks. */}
-        <a href="#main" className="skip-link">
-          Skip to main content
-        </a>
-        <TopBar />
-        <main id="main" className="view" tabIndex={-1}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/overview" replace />} />
-            <Route path="/overview" element={<Overview />} />
-            <Route path="/portfolio" element={<Portfolio />} />
-            <Route path="/geo" element={<GeoRisk />} />
-            {/*
-             * `/detail` and `/detail/:symbol` both land on Detail. The page
-             * reads useParams() and falls back to a default when the param
-             * is absent, so the bare `/detail` URL still works.
-             */}
-            <Route path="/detail" element={<Detail />} />
-            <Route path="/detail/:symbol" element={<Detail />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="*" element={<Navigate to="/overview" replace />} />
-          </Routes>
-        </main>
-      </div>
-      <TweaksPanel />
-      {/* Global ⌘K symbol search — listens for the shortcut internally. */}
-      <SymbolSearch />
+      <AuthProvider>
+        <div className="shell">
+          {/* Skip-link — first focusable element on the page. */}
+          <a href="#main" className="skip-link">
+            Skip to main content
+          </a>
+          <TopBar />
+          <main id="main" className="view" tabIndex={-1}>
+            <Routes>
+              {/* Public auth routes (always accessible) */}
+              <Route path="/login"  element={<Login />} />
+              <Route path="/signup" element={<Login />} />
+
+              {/* Protected app routes — RequireAuth redirects to /login in Supabase mode */}
+              <Route path="/" element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
+              <Route path="/overview"        element={<RequireAuth><Overview /></RequireAuth>} />
+              <Route path="/portfolio"       element={<RequireAuth><Portfolio /></RequireAuth>} />
+              <Route path="/geo"             element={<RequireAuth><GeoRisk /></RequireAuth>} />
+              <Route path="/detail"          element={<RequireAuth><Detail /></RequireAuth>} />
+              <Route path="/detail/:symbol"  element={<RequireAuth><Detail /></RequireAuth>} />
+              <Route path="/settings"        element={<RequireAuth><Settings /></RequireAuth>} />
+              <Route path="*"                element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
+            </Routes>
+          </main>
+        </div>
+        <TweaksPanel />
+        {/* Global ⌘K symbol search */}
+        <SymbolSearch />
+      </AuthProvider>
     </TweaksProvider>
   );
 }
