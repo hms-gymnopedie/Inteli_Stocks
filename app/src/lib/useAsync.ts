@@ -108,9 +108,14 @@ export function useAsync<T>(
       }
       fn()
         .then((data) => {
-          if (cancelled) return;
+          // Always populate the cache so the next mount sees it — gating
+          // this on `cancelled` would lose writes when the user navigates
+          // away faster than the fetch resolves (StrictMode dev double-
+          // mount also triggers an unmount before the first fetch lands).
           cacheSet(cacheKey, data);
-          setState({ data, loading: false, error: undefined });
+          if (!cancelled) {
+            setState({ data, loading: false, error: undefined });
+          }
         })
         .catch((error: Error) => {
           if (!cancelled) setState((s) => ({ ...s, loading: false, error }));

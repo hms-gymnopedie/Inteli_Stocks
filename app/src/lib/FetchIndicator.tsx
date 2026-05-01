@@ -1,59 +1,77 @@
 /**
- * FetchIndicator — small topbar widget showing live REST + SSE activity.
+ * FetchIndicator — topbar widget showing live REST + SSE activity.
  *
- * Consumed from `useFetchStatus()` (see fetchStatus.ts). The status is
- * derived rather than held: the widget recomputes from `pending`,
- * `errors`, and `lastSuccess.at` every render.
+ * Reads `useFetchStatus()` (see fetchStatus.ts).
  *
  * States:
- *   - LOADING (pending > 0)        — pulsing orange dot, count of requests
- *   - ERR     (lastError recent)   — red dot, hover for detail
- *   - LIVE    (recent ok response) — solid green dot
- *   - IDLE    (no activity yet)    — dim gray dot, "—"
+ *   - LOADING (pending > 0)        — pulsing orange dot, count of in-flight
+ *   - ERR     (lastError recent)   — red dot, error count
+ *   - LIVE    (recent ok response) — green dot, ok count
+ *   - IDLE    (no activity yet)    — dim gray dot, "Waiting"
+ *
+ * Click to expand → popover listing recent fetches (endpoint + status +
+ * fixed timestamp) and currently in-flight requests. Esc / outside click
+ * closes the popover. The label uses the absolute receipt time (e.g.
+ * "@ 21:23:45 NY") rather than a rolling "(3s ago)" so the number stays
+ * fixed once a fetch lands.
  */
 
-import { useEffect, useState } from 'react';
-import { useFetchStatus } from './fetchStatus';
+import { useEffect, useRef, useState } from 'react';
+import { useFetchStatus, type RecentEvent } from './fetchStatus';
 import { triggerManualRefresh } from './refreshInterval';
 import { useTweaks } from './tweaks';
 import { formatTime } from './format';
 
-function ageSeconds(now: number, then: number | null): number | null {
-  if (then == null) return null;
-  return Math.max(0, Math.floor((now - then) / 1000));
-}
-
 function shortLabel(label: string): string {
   // "/api/market/indices" → "market/indices"
   // "SSE /api/ai/signals" → "ai/signals"
-  return label.replace(/^\/?api\//, '').replace(/^SSE\s+\/?api\//, '');
+  return label
+    .replace(/^SSE\s+/, '')
+    .replace(/^https?:\/\/[^/]+/, '')
+    .replace(/^\/?api\//, '');
 }
 
-/** "5s ago" / "12m ago" / "2h ago" — coarse but compact. */
-function formatAge(seconds: number): string {
-  if (seconds < 60)    return `${seconds}s ago`;
-  if (seconds < 3600)  return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
+function tzAbbreviation(tz: string): string {
+  if (tz === 'America/New_York') return 'NY';
+  if (tz === 'Asia/Seoul')       return 'KST';
+  if (tz === 'Europe/London')    return 'LDN';
+  return 'UTC';
 }
 
 export function FetchIndicator() {
-  const { pending, completed, errors, lastError, lastSuccess, total } =
-    useFetchStatus();
+  const status = useFetchStatus();
+  const { pending, completed, errors, lastError, lastSuccess, total, recent, inflight } = status;
   const { values } = useTweaks();
+  const tz = values.timezone || 'America/New_York';
+  const tzAbbrev = tzAbbreviation(tz);
 
-  // Tick every second so "12s ago" stays accurate without each event
-  // forcing a render.
-  const [now, setNow] = useState(() => Date.now());
+  // Popover open/close state. The chip itself is the trigger.
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLSpanElement | null>(null);
+
+  // Close on Escape and on outside click.
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+    if (!open) return;
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    function onPointer(e: MouseEvent): void {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('mousedown', onPointer);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('mousedown', onPointer);
+    };
+  }, [open]);
 
-  // Determine state. ERR sticks around for ~5 s after the last error,
-  // unless something successful has happened more recently.
-  const errorAge   = ageSeconds(now, lastError?.at   ?? null);
-  const successAge = ageSeconds(now, lastSuccess?.at ?? null);
+  // Determine state. ERR sticks for ~5 s after the last error, unless
+  // something successful has happened more recently.
+  const now = Date.now();
+  const errorAge   = lastError   ? Math.floor((now - lastError.at)   / 1000) : null;
+  const successAge = lastSuccess ? Math.floor((now - lastSuccess.at) / 1000) : null;
   const errorRecent =
     errorAge != null &&
     errorAge < 5 &&
@@ -63,71 +81,150 @@ export function FetchIndicator() {
   let dotColor: string;
   let label: string;
 
-  // "(Xs ago)" suffix sourced from the last successful response.
-  const lastReceivedSuffix =
-    successAge != null ? ` (${formatAge(successAge)})` : '';
-  // "(Xs ago)" suffix from the last error, used in the err state.
-  const lastErrorSuffix =
-    errorAge != null ? ` (${formatAge(errorAge)})` : '';
+  // Fixed-timestamp suffix (no rolling "Xs ago") sourced from last receipt.
+  const lastReceivedTime =
+    lastSuccess
+      ? formatTime(lastSuccess.at, { timeZone: tz, abbreviation: tzAbbrev })
+      : null;
+  const lastErrorTime =
+    lastError
+      ? formatTime(lastError.at, { timeZone: tz, abbreviation: tzAbbrev })
+      : null;
 
   if (pending > 0) {
-    // Currently making N network calls — pulsing orange. Still show the
-    // most-recent receipt time so the user can tell when they last had
-    // data even mid-refresh.
     state = 'loading';
     dotColor = 'var(--orange)';
-    label = `Fetching ${pending}${lastReceivedSuffix}`;
+    label = lastReceivedTime
+      ? `Fetching ${pending} · last ${lastReceivedTime}`
+      : `Fetching ${pending}`;
   } else if (errorRecent) {
-    // The most recent activity (within the last 5 s) was an error.
     state = 'err';
     dotColor = 'var(--down)';
-    label = (errors === 1 ? 'Error' : `Errors ${errors}`) + lastErrorSuffix;
-  } else if (successAge != null) {
-    // No requests in flight; we have at least one prior success → live & idle.
+    label = lastErrorTime
+      ? `${errors === 1 ? 'Error' : `Errors ${errors}`} @ ${lastErrorTime}`
+      : (errors === 1 ? 'Error' : `Errors ${errors}`);
+  } else if (lastReceivedTime) {
     state = 'live';
     dotColor = 'var(--up)';
-    label = `Live · ${completed} ok${lastReceivedSuffix}`;
+    label = `Live · ${completed} ok @ ${lastReceivedTime}`;
   } else {
-    // No activity yet (right after page load before the first fetch lands).
     state = 'idle';
     dotColor = 'var(--fg-4)';
     label = 'Waiting';
   }
 
-  // Tooltip — last activity summary.
-  const lastEvent = lastError && lastSuccess
-    ? lastError.at > lastSuccess.at ? lastError : lastSuccess
-    : (lastError ?? lastSuccess);
-  const lastAge = lastEvent ? ageSeconds(now, lastEvent.at) : null;
-  const tooltip = [
-    `pending ${pending}`,
-    `ok ${completed}`,
-    `err ${errors}`,
-    `total ${total}`,
-    lastEvent
-      ? `last ${lastEvent.ok ? 'ok' : 'err'}: ${shortLabel(lastEvent.label)}${
-          lastEvent.detail ? ` (${lastEvent.detail})` : ''
-        } · ${lastAge}s ago`
-      : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
   return (
-    <span
-      className={`fetch-indicator ${state}`}
-      title={tooltip}
-      role="status"
-      aria-live="polite"
-      aria-label={`Data ${state}, ${pending} pending, ${errors} errors, ${completed} ok`}
-    >
-      <span
-        className="fetch-indicator-dot"
-        style={{ background: dotColor }}
-        data-pulsing={state === 'loading' ? 'true' : undefined}
-      />
-      <span className="fetch-indicator-label">{label}</span>
+    <span ref={wrapperRef} className="fetch-indicator-wrap">
+      <button
+        type="button"
+        className={`fetch-indicator ${state}`}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label={`Data ${state}, ${pending} pending, ${errors} errors, ${completed} ok. Click for details.`}
+      >
+        <span
+          className="fetch-indicator-dot"
+          style={{ background: dotColor }}
+          data-pulsing={state === 'loading' ? 'true' : undefined}
+        />
+        <span className="fetch-indicator-label">{label}</span>
+      </button>
+
+      {open && (
+        <FetchPopover
+          recent={recent}
+          inflight={inflight}
+          totals={{ pending, completed, errors, total }}
+          tz={tz}
+          tzAbbrev={tzAbbrev}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </span>
+  );
+}
+
+interface PopoverProps {
+  recent: RecentEvent[];
+  inflight: { id: number; kind: string; label: string; startedAt: number }[];
+  totals: { pending: number; completed: number; errors: number; total: number };
+  tz: string;
+  tzAbbrev: string;
+  onClose: () => void;
+}
+
+function FetchPopover({ recent, inflight, totals, tz, tzAbbrev, onClose }: PopoverProps) {
+  return (
+    <div
+      className="fetch-popover"
+      role="dialog"
+      aria-label="Recent network activity"
+    >
+      <div className="fetch-popover-head">
+        <div className="fetch-popover-title">Recent activity</div>
+        <button
+          type="button"
+          className="fetch-popover-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="fetch-popover-totals">
+        <span><span className="dot up"   /> {totals.completed} ok</span>
+        <span><span className="dot down" /> {totals.errors} err</span>
+        <span><span className="dot live" /> {totals.pending} pending</span>
+        <span className="muted">total {totals.total}</span>
+      </div>
+
+      {inflight.length > 0 && (
+        <>
+          <div className="fetch-popover-section-h">In flight</div>
+          <ul className="fetch-popover-list">
+            {inflight.map((e) => (
+              <li key={e.id} className="fetch-popover-row pending">
+                <span className="fetch-popover-time">
+                  {formatTime(e.startedAt, { timeZone: tz, abbreviation: tzAbbrev })}
+                </span>
+                <span className="fetch-popover-method">{e.kind === 'sse' ? 'SSE' : 'GET'}</span>
+                <span className="fetch-popover-label" title={e.label}>{shortLabel(e.label)}</span>
+                <span className="fetch-popover-status">…</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <div className="fetch-popover-section-h">
+        Last {Math.min(recent.length, 30)} {recent.length === 0 ? 'events' : recent.length === 1 ? 'event' : 'events'}
+      </div>
+      {recent.length === 0 ? (
+        <div className="fetch-popover-empty">No requests yet.</div>
+      ) : (
+        <ul className="fetch-popover-list">
+          {recent.map((e, i) => (
+            <li
+              key={`${e.at}-${e.label}-${i}`}
+              className={`fetch-popover-row ${e.ok ? 'ok' : 'err'}`}
+            >
+              <span className="fetch-popover-time">
+                {formatTime(e.at, { timeZone: tz, abbreviation: tzAbbrev })}
+              </span>
+              <span className="fetch-popover-method">
+                {e.label.startsWith('SSE') ? 'SSE' : 'GET'}
+              </span>
+              <span className="fetch-popover-label" title={e.label}>
+                {shortLabel(e.label)}
+              </span>
+              <span className="fetch-popover-status">{e.detail ?? (e.ok ? '200' : 'err')}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -173,11 +270,7 @@ export function LiveClock() {
   }, []);
 
   const tz = values.timezone || 'America/New_York';
-  const tzAbbrev =
-    tz === 'America/New_York' ? 'NY'
-    : tz === 'Asia/Seoul'      ? 'KST'
-    : tz === 'Europe/London'   ? 'LDN'
-    : 'UTC';
+  const tzAbbrev = tzAbbreviation(tz);
   const time = formatTime(now, { timeZone: tz, abbreviation: tzAbbrev });
   const date = new Intl.DateTimeFormat('en-US', {
     day:      '2-digit',

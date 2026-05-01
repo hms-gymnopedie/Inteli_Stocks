@@ -46,7 +46,12 @@ export interface FetchStatus {
   lastError: RecentEvent | null;
   /** Cumulative request count since module load (for "n loaded" display). */
   total: number;
+  /** Bounded ring buffer of the last N events (most recent first). */
+  recent: RecentEvent[];
 }
+
+/** Max entries kept in the `recent` log shown in the indicator popover. */
+const RECENT_LIMIT = 30;
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
@@ -58,6 +63,7 @@ const NULL_STATUS: FetchStatus = {
   lastSuccess: null,
   lastError:   null,
   total:      0,
+  recent:     [],
 };
 
 let state: FetchStatus = NULL_STATUS;
@@ -106,6 +112,7 @@ function completeEntry(entry: InflightEntry, ok: boolean, detail?: string): void
     errors:     ok ? state.errors          : state.errors + 1,
     lastSuccess: ok ? event : state.lastSuccess,
     lastError:   ok ? state.lastError : event,
+    recent:     [event, ...state.recent].slice(0, RECENT_LIMIT),
   });
 }
 
@@ -128,10 +135,17 @@ export function registerStream(label: string): StreamHandle {
       if (settled) return;
       // Don't decrement inflight on first chunk — keep stream as "pending"
       // until done(). But mark a successful event for the tooltip.
+      const event: RecentEvent = {
+        at: Date.now(),
+        ok: true,
+        label: entry.label,
+        detail,
+      };
       setState({
         completed:   state.completed + 1,
         total:       state.total,           // already counted at start
-        lastSuccess: { at: Date.now(), ok: true, label: entry.label, detail },
+        lastSuccess: event,
+        recent:      [event, ...state.recent].slice(0, RECENT_LIMIT),
       });
     },
     error: (detail) => {
