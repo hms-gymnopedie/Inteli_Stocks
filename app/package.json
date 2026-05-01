@@ -15,6 +15,7 @@
     "test:visual:update": "playwright test visual --update-snapshots"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.47.0",
     "d3-geo": "^3.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
