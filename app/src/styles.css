@@ -1930,3 +1930,76 @@ svg [data-pin='true']:focus-visible {
   text-align: center;
   font-style: italic;
 }
+
+/* ============================================================
+   AI on-demand triggers (signals / insights / verdict / hedge)
+   ============================================================ */
+.ai-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--orange);
+  border-radius: 6px;
+  background: var(--orange-glow);
+  color: var(--orange);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.ai-trigger-btn:hover:not(:disabled) {
+  background: var(--orange);
+  color: #fff;
+}
+.ai-trigger-btn:disabled {
+  cursor: progress;
+  opacity: 0.55;
+}
+.ai-trigger-btn.ghost {
+  background: transparent;
+  border-color: var(--hairline-2);
+  color: var(--fg-3);
+}
+.ai-trigger-btn.ghost:hover:not(:disabled) {
+  border-color: var(--down);
+  color: var(--down);
+  background: transparent;
+}
+
+.ai-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+}
+.ai-badge.idle    { color: var(--fg-4);  border-color: var(--hairline); }
+.ai-badge.loading {
+  color: var(--orange);
+  border-color: var(--orange);
+  animation: aiBadgePulse 1.2s ease-in-out infinite;
+}
+.ai-badge.ok      { color: var(--up);    border-color: var(--up); }
+.ai-badge.err     { color: var(--down);  border-color: var(--down); }
+
+@keyframes aiBadgePulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1;   }
+}
+
+.ai-empty {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px dashed var(--hairline-2);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--fg-3);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}

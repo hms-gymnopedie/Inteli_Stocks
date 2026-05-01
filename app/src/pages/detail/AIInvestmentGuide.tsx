@@ -1,18 +1,14 @@
 import { getVerdict } from '../../data/ai';
 import type { AIVerdict, ConvictionAxis } from '../../data/types';
-import { useAsync } from '../../lib/useAsync';
+import { formatTime } from '../../lib/format';
+import { useTweaks } from '../../lib/tweaks';
+import { useOnDemand } from '../../lib/useOnDemand';
 
 interface AIInvestmentGuideProps {
-  /**
-   * Symbol to fetch the verdict for. Optional today so the section keeps
-   * rendering until B4-RT rewrites `pages/detail/index.tsx` to pass the
-   * route param through. Defaults to NVDA — same hardcoded symbol the rest
-   * of the Detail page uses pre-B4-RT.
-   */
   symbol?: string;
 }
 
-const SKELETON_AXES: ConvictionAxis[] = [
+const PLACEHOLDER_AXES: ConvictionAxis[] = [
   { label: 'MOMENTUM',  score: 0, maxScore: 5, color: 'accent' },
   { label: 'VALUATION', score: 0, maxScore: 5, color: 'accent' },
   { label: 'QUALITY',   score: 0, maxScore: 5, color: 'accent' },
@@ -21,30 +17,61 @@ const SKELETON_AXES: ConvictionAxis[] = [
 ];
 
 export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
-  const { data, loading } = useAsync<AIVerdict>(
-    () => getVerdict(symbol),
-    [symbol],
-  );
+  const { values } = useTweaks();
+  const tz = values.timezone || 'America/New_York';
+  const tzAbbrev =
+    tz === 'America/New_York' ? 'NY'
+    : tz === 'Asia/Seoul'      ? 'KST'
+    : tz === 'Europe/London'   ? 'LDN'
+    : 'UTC';
 
-  const dimmed = loading && !data ? { opacity: 0.4 } : undefined;
-  const axes = data?.axes ?? SKELETON_AXES;
+  const verdict = useOnDemand<AIVerdict>(() => getVerdict(symbol));
+  const axes = verdict.data?.axes ?? PLACEHOLDER_AXES;
+  const dimmed = !verdict.data ? { opacity: 0.5 } : undefined;
 
   return (
     <div>
-      <div className="wf-label">AI Investment Guide</div>
+      <div className="row between">
+        <div className="wf-label">AI Investment Guide</div>
+        {verdict.loading ? (
+          <span className="ai-badge loading">Generating…</span>
+        ) : verdict.error ? (
+          <span className="ai-badge err" title={verdict.error.message}>Failed</span>
+        ) : verdict.lastReceivedAt ? (
+          <span className="ai-badge ok">
+            @ {formatTime(verdict.lastReceivedAt, { timeZone: tz, abbreviation: tzAbbrev })}
+          </span>
+        ) : (
+          <span className="ai-badge idle">Idle</span>
+        )}
+      </div>
+
+      <div className="row" style={{ marginTop: 8, gap: 6 }}>
+        <button
+          type="button"
+          className="ai-trigger-btn"
+          onClick={verdict.run}
+          disabled={verdict.loading}
+        >
+          {verdict.loading
+            ? 'Analyzing…'
+            : verdict.data
+              ? `↻ Re-analyze ${symbol}`
+              : `Analyze ${symbol}`}
+        </button>
+      </div>
+
       <div
         className="wf-panel-flat"
         style={{ padding: 10, marginTop: 8, ...dimmed }}
-        aria-busy={loading}
+        aria-busy={verdict.loading}
       >
         <div className="wf-num" style={{ fontSize: 22 }}>
-          {data ? data.convictionScore : '—'}
-          <span className="muted-2" style={{ fontSize: 12 }}>
-            /100
-          </span>
+          {verdict.data ? verdict.data.convictionScore : '—'}
+          <span className="muted-2" style={{ fontSize: 12 }}>/100</span>
         </div>
         <div className="wf-mini accent">
-          {data ? `CONVICTION · ${data.verdict}` : 'CONVICTION SCORE'}
+          {verdict.data ? `CONVICTION · ${verdict.data.verdict}` : 'CONVICTION SCORE'}
         </div>
         <div
           style={{
@@ -54,7 +81,11 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
             lineHeight: 1.5,
           }}
         >
-          {data ? data.summary : 'Loading verdict…'}
+          {verdict.error
+            ? `Generation failed: ${verdict.error.message}`
+            : verdict.data
+              ? verdict.data.summary
+              : 'Click the button above to ask the AI for a verdict.'}
         </div>
         <hr className="wf-divider" style={{ margin: '10px 0' }} />
         <div
@@ -77,11 +108,7 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
 
 function AxisRow({ axis }: { axis: ConvictionAxis }) {
   const colorClass =
-    axis.color === 'up'
-      ? 'up'
-      : axis.color === 'down'
-        ? 'down'
-        : 'accent';
+    axis.color === 'up' ? 'up' : axis.color === 'down' ? 'down' : 'accent';
   return (
     <div className="row between">
       <span className="muted">{axis.label}</span>

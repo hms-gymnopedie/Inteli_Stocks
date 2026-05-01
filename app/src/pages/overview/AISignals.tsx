@@ -1,83 +1,109 @@
 import { streamSignals } from '../../data/ai';
 import type { AISignal } from '../../data/types';
-import { useAsyncStream } from '../../lib/useAsync';
+import { formatTime } from '../../lib/format';
+import { useTweaks } from '../../lib/tweaks';
+import { useOnDemandStream } from '../../lib/useOnDemand';
 
 /**
- * Skeleton signal cards rendered while the SSE stream is warming up.
- * Same shape as a real card so the layout doesn't jump when items arrive.
+ * AI Assistant — on-demand. Click "Generate" to ask the configured AI
+ * provider for fresh market signal cards. We deliberately do NOT auto-fetch
+ * on mount or polling intervals — LLM calls are slow and metered.
  */
-const SKELETON_COUNT = 2;
-
 export function AISignals() {
-  const signals = useAsyncStream<AISignal>(() => streamSignals(), []);
-  const showSkeleton = signals.length === 0;
+  const { values } = useTweaks();
+  const tz = values.timezone || 'America/New_York';
+  const tzAbbrev =
+    tz === 'America/New_York' ? 'NY'
+    : tz === 'Asia/Seoul'      ? 'KST'
+    : tz === 'Europe/London'   ? 'LDN'
+    : 'UTC';
+
+  const stream = useOnDemandStream<AISignal>(() => streamSignals());
 
   return (
     <div>
       <div className="row between">
         <div className="wf-label">AI Assistant</div>
-        <div className="chip dot warn">{showSkeleton ? 'WAIT' : 'LIVE'}</div>
+        {stream.loading ? (
+          <span className="ai-badge loading">Generating…</span>
+        ) : stream.error ? (
+          <span className="ai-badge err" title={stream.error.message}>Failed</span>
+        ) : stream.lastReceivedAt ? (
+          <span className="ai-badge ok">
+            {stream.items.length} ok @{' '}
+            {formatTime(stream.lastReceivedAt, { timeZone: tz, abbreviation: tzAbbrev })}
+          </span>
+        ) : (
+          <span className="ai-badge idle">Idle</span>
+        )}
       </div>
 
-      {showSkeleton
-        ? Array.from({ length: SKELETON_COUNT }, (_, i) => (
-            <div
-              key={`sk-${i}`}
-              className="wf-panel-flat"
-              style={{ padding: 10, marginTop: 8, opacity: 0.4 }}
-              aria-busy
-            >
-              <div
-                className="wf-mini accent"
-                style={{ marginBottom: 6 }}
-              >
-                // —
-              </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  lineHeight: 1.45,
-                  color: 'var(--fg-3)',
-                }}
-              >
-                ————————————————————————————
-              </div>
-              <div className="row gap-2" style={{ marginTop: 8 }}>
-                <span className="tag">—</span>
-                <span className="tag">—</span>
-              </div>
-            </div>
-          ))
-        : signals.map((sig) => (
-            <SignalCard key={sig.id} signal={sig} />
-          ))}
+      <div className="row" style={{ marginTop: 8, gap: 6 }}>
+        <button
+          type="button"
+          className="ai-trigger-btn"
+          onClick={stream.run}
+          disabled={stream.loading}
+        >
+          {stream.loading ? 'Generating…' : stream.items.length > 0 ? '↻ Regenerate' : 'Generate signals'}
+        </button>
+        {stream.items.length > 0 && (
+          <button
+            type="button"
+            className="ai-trigger-btn ghost"
+            onClick={stream.reset}
+            disabled={stream.loading}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {stream.items.length === 0 && !stream.loading && (
+        <div className="ai-empty">
+          {stream.error
+            ? 'Generation failed. Check Settings → AI Provider keys.'
+            : 'Click Generate to ask the AI for current market signals.'}
+        </div>
+      )}
+
+      {stream.items.map((entry, i) => (
+        <SignalCard
+          key={`${entry.receivedAt}-${i}`}
+          signal={entry.data}
+          receivedAt={entry.receivedAt}
+          tz={tz}
+          tzAbbrev={tzAbbrev}
+        />
+      ))}
     </div>
   );
 }
 
-function SignalCard({ signal }: { signal: AISignal }) {
+interface SignalCardProps {
+  signal: AISignal;
+  receivedAt: number;
+  tz: string;
+  tzAbbrev: string;
+}
+
+function SignalCard({ signal, receivedAt, tz, tzAbbrev }: SignalCardProps) {
   const headerColor =
-    signal.type === 'CAUTION'
-      ? 'var(--down)'
-      : signal.type === 'INFO'
-        ? 'var(--fg-2)'
-        : 'var(--orange)';
+    signal.type === 'CAUTION' ? 'var(--down)'
+    : signal.type === 'INFO'   ? 'var(--fg-2)'
+    : 'var(--orange)';
 
   return (
     <div className="wf-panel-flat" style={{ padding: 10, marginTop: 8 }}>
-      <div
-        className="wf-mini"
-        style={{ color: headerColor, marginBottom: 6 }}
-      >
-        // {signal.type} · {signal.when}
+      <div className="row between" style={{ marginBottom: 6 }}>
+        <div className="wf-mini" style={{ color: headerColor }}>
+          // {signal.type} · {signal.when}
+        </div>
+        <div className="wf-mini muted" title={new Date(receivedAt).toISOString()}>
+          {formatTime(receivedAt, { timeZone: tz, abbreviation: tzAbbrev })}
+        </div>
       </div>
-      <div
-        style={{
-          fontSize: 12,
-          lineHeight: 1.45,
-          color: 'var(--fg-2)',
-        }}
-      >
+      <div style={{ fontSize: 12, lineHeight: 1.45, color: 'var(--fg-2)' }}>
         {signal.body}
       </div>
       <div className="row gap-2" style={{ marginTop: 8 }}>
@@ -89,10 +115,7 @@ function SignalCard({ signal }: { signal: AISignal }) {
               className="tag"
               style={
                 isAction
-                  ? {
-                      color: 'var(--orange)',
-                      borderColor: 'var(--orange)',
-                    }
+                  ? { color: 'var(--orange)', borderColor: 'var(--orange)' }
                   : undefined
               }
             >

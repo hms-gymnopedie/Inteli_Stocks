@@ -2,7 +2,9 @@ import { useMemo, useRef, useState } from 'react';
 
 import { streamInsights } from '../../data/ai';
 import type { AICategory, AIInsight } from '../../data/types';
-import { useAsyncStream } from '../../lib/useAsync';
+import { formatTime } from '../../lib/format';
+import { useTweaks } from '../../lib/tweaks';
+import { useOnDemandStream } from '../../lib/useOnDemand';
 
 const CATEGORIES: { id: AICategory | 'ALL'; label: string }[] = [
   { id: 'ALL',         label: 'ALL'      },
@@ -12,18 +14,24 @@ const CATEGORIES: { id: AICategory | 'ALL'; label: string }[] = [
   { id: 'EARNINGS',    label: 'EARNINGS' },
 ];
 
-const SKELETON_COUNT = 3;
-
+/**
+ * Portfolio AI insights — on-demand. Click "Generate" to ask the AI
+ * provider for insight cards tailored to your portfolio. No auto-fetch.
+ */
 export function AIInsightsFeed() {
-  const insights = useAsyncStream<AIInsight>(
-    () => streamInsights('default'),
-    [],
-  );
+  const { values } = useTweaks();
+  const tz = values.timezone || 'America/New_York';
+  const tzAbbrev =
+    tz === 'America/New_York' ? 'NY'
+    : tz === 'Asia/Seoul'      ? 'KST'
+    : tz === 'Europe/London'   ? 'LDN'
+    : 'UTC';
+
+  const stream = useOnDemandStream<AIInsight>(() => streamInsights('default'));
 
   const [filter, setFilter] = useState<AICategory | 'ALL'>('ALL');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  // ARIA tabs keyboard pattern — Left/Right cycle, Home/End jump.
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
     let next = idx;
     if (e.key === 'ArrowRight') next = (idx + 1) % CATEGORIES.length;
@@ -39,12 +47,10 @@ export function AIInsightsFeed() {
   const visible = useMemo(
     () =>
       filter === 'ALL'
-        ? insights
-        : insights.filter((c) => c.tag === filter),
-    [insights, filter],
+        ? stream.items
+        : stream.items.filter((c) => c.data.tag === filter),
+    [stream.items, filter],
   );
-
-  const showSkeleton = insights.length === 0;
 
   return (
     <aside
@@ -55,22 +61,51 @@ export function AIInsightsFeed() {
         overflow: 'auto',
       }}
     >
-      <div
-        style={{
-          padding: 14,
-          borderBottom: '1px solid var(--hairline)',
-        }}
-      >
+      <div style={{ padding: 14, borderBottom: '1px solid var(--hairline)' }}>
         <div className="row between center">
           <div>
-            <div className="wf-label">AI Insights · Live feed</div>
+            <div className="wf-label">AI Insights · On-demand</div>
             <div className="wf-mini muted-2" style={{ marginTop: 2 }}>
               tailored to your portfolio
             </div>
           </div>
-          <span className="chip dot warn">
-            {showSkeleton ? 'WAIT' : `${insights.length} NEW`}
-          </span>
+          {stream.loading ? (
+            <span className="ai-badge loading">Generating…</span>
+          ) : stream.error ? (
+            <span className="ai-badge err" title={stream.error.message}>Failed</span>
+          ) : stream.lastReceivedAt ? (
+            <span className="ai-badge ok">
+              {stream.items.length} ok @{' '}
+              {formatTime(stream.lastReceivedAt, { timeZone: tz, abbreviation: tzAbbrev })}
+            </span>
+          ) : (
+            <span className="ai-badge idle">Idle</span>
+          )}
+        </div>
+
+        <div className="row" style={{ marginTop: 10, gap: 6 }}>
+          <button
+            type="button"
+            className="ai-trigger-btn"
+            onClick={stream.run}
+            disabled={stream.loading}
+          >
+            {stream.loading
+              ? 'Generating…'
+              : stream.items.length > 0
+                ? '↻ Regenerate'
+                : 'Generate insights'}
+          </button>
+          {stream.items.length > 0 && (
+            <button
+              type="button"
+              className="ai-trigger-btn ghost"
+              onClick={stream.reset}
+              disabled={stream.loading}
+            >
+              Clear
+            </button>
+          )}
         </div>
 
         <div
@@ -118,26 +153,43 @@ export function AIInsightsFeed() {
           flex: 1,
         }}
       >
-        {showSkeleton
-          ? Array.from({ length: SKELETON_COUNT }, (_, i) => (
-              <SkeletonCard key={`sk-${i}`} />
-            ))
-          : visible.length === 0
-            ? (
-                <div
-                  className="wf-mini muted"
-                  style={{ padding: 8, textAlign: 'center' }}
-                >
-                  No insights match this filter yet.
-                </div>
-              )
-            : visible.map((c) => <InsightCard key={c.id} card={c} />)}
+        {stream.items.length === 0 && !stream.loading && (
+          <div className="ai-empty">
+            {stream.error
+              ? 'Generation failed. Check Settings → AI Provider keys.'
+              : 'Click Generate to ask the AI for portfolio insights.'}
+          </div>
+        )}
+        {visible.length === 0 && stream.items.length > 0 && !stream.loading && (
+          <div
+            className="wf-mini muted"
+            style={{ padding: 8, textAlign: 'center' }}
+          >
+            No insights match this filter.
+          </div>
+        )}
+        {visible.map((entry, i) => (
+          <InsightCard
+            key={`${entry.data.id}-${i}`}
+            card={entry.data}
+            receivedAt={entry.receivedAt}
+            tz={tz}
+            tzAbbrev={tzAbbrev}
+          />
+        ))}
       </div>
     </aside>
   );
 }
 
-function InsightCard({ card }: { card: AIInsight }) {
+interface InsightCardProps {
+  card: AIInsight;
+  receivedAt: number;
+  tz: string;
+  tzAbbrev: string;
+}
+
+function InsightCard({ card, receivedAt, tz, tzAbbrev }: InsightCardProps) {
   const tagColor =
     card.tone === 'orange'
       ? 'var(--orange)'
@@ -151,15 +203,14 @@ function InsightCard({ card }: { card: AIInsight }) {
         <span className="wf-mini" style={{ color: tagColor }}>
           // {card.tag}
         </span>
-        <span className="wf-mini muted-2">{card.when}</span>
+        <span
+          className="wf-mini muted-2"
+          title={new Date(receivedAt).toISOString()}
+        >
+          {formatTime(receivedAt, { timeZone: tz, abbreviation: tzAbbrev })}
+        </span>
       </div>
-      <div
-        style={{
-          fontSize: 13,
-          marginTop: 6,
-          color: 'var(--fg)',
-        }}
-      >
+      <div style={{ fontSize: 13, marginTop: 6, color: 'var(--fg)' }}>
         {card.title}
       </div>
       <div
@@ -177,9 +228,7 @@ function InsightCard({ card }: { card: AIInsight }) {
         <div className="row gap-2 wf-mini">
           <span className="muted">RISK {card.risk}</span>
           <span className="muted">·</span>
-          <span>
-            SCORE <span className="accent">{card.score}</span>
-          </span>
+          <span>SCORE <span className="accent">{card.score}</span></span>
         </div>
         <div className="row gap-1">
           {card.actions.map((a, j) => (
@@ -188,58 +237,13 @@ function InsightCard({ card }: { card: AIInsight }) {
               className="tag"
               style={
                 j === 0
-                  ? {
-                      color: 'var(--orange)',
-                      borderColor: 'var(--orange)',
-                    }
+                  ? { color: 'var(--orange)', borderColor: 'var(--orange)' }
                   : {}
               }
             >
               {a}
             </span>
           ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SkeletonCard() {
-  return (
-    <div
-      className="wf-panel-flat"
-      style={{ padding: 12, opacity: 0.4 }}
-      aria-busy
-    >
-      <div className="row between">
-        <span className="wf-mini accent">// —</span>
-        <span className="wf-mini muted-2">—</span>
-      </div>
-      <div style={{ fontSize: 13, marginTop: 6, color: 'var(--fg-3)' }}>
-        ————————————————
-      </div>
-      <div
-        style={{
-          fontSize: 11,
-          marginTop: 4,
-          color: 'var(--fg-3)',
-          lineHeight: 1.5,
-        }}
-      >
-        ——————————————————————————————
-      </div>
-      <hr className="wf-divider" style={{ margin: '8px 0' }} />
-      <div className="row between center">
-        <div className="row gap-2 wf-mini">
-          <span className="muted">RISK —</span>
-          <span className="muted">·</span>
-          <span>
-            SCORE <span className="accent">—</span>
-          </span>
-        </div>
-        <div className="row gap-1">
-          <span className="tag">—</span>
-          <span className="tag">—</span>
         </div>
       </div>
     </div>
