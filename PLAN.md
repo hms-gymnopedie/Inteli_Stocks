@@ -193,8 +193,8 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 | ID | Task | 파일 | Agent | Status | Notes |
 |---|---|---|---|---|---|
-| B5-AU | 인증 (Supabase 또는 Clerk) | `app/src/auth/*` | backend-api-data-engineer | ⬜ | |
-| B5-CR | 포트폴리오 CRUD + 동기화 | `server/routes/portfolio/*` | backend-api-data-engineer | ⬜ | |
+| B5-AU | 인증 (Supabase 또는 Clerk) | `app/src/auth/*` | backend-api-data-engineer | 🟡 | |
+| B5-CR | 포트폴리오 CRUD + 동기화 | `server/routes/portfolio/*` | backend-api-data-engineer | 🟡 | |
 | B5-NT | 알림/푸시 (이메일/웹훅) | `server/jobs/*` | backend-api-data-engineer | ⬜ | |
 
 ### 배치 R — 리뷰 (각 페이즈 종료 시)
