@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-04-30 (B4-CI + B4-UT + B6 병렬 완료 — CI / 유닛 테스트 / 신규 섹션 5개)
+**Last updated:** 2026-05-01 (CI 첫 그린 + B5-AU/CR + B2-MAP-2 — Supabase 인증, WorldMap 줌·팬·핀 클릭, CI workflow 그린)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
