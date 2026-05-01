@@ -97,8 +97,8 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | Allocation | `portfolio.getAllocation('sector')` | sector/region/asset 토글 | drill-in (sector→종목) |
 | HoldingsTable | `portfolio.getHoldings()` | 정렬·필터·검색·가상 스크롤 | 컬럼 표시/순서 커스터마이즈 |
 | AIInsightsFeed | `ai.streamInsights(portfolioId)` | dismiss, hedge 시뮬, 무한 스크롤 | 카테고리 필터(OPP/RISK/MACRO/EARNINGS), 알림 설정 |
-| (신규) Trades log | `portfolio.getTrades()` | 기간/심볼 필터 | 펼침/접힘 |
-| (신규) Risk decomposition | `portfolio.getRiskFactors()` | factor 클릭 → 기여도 | beta/sector/geo factor exposure |
+| (신규) Trades log ✅ | `portfolio.getTrades()` | 기간/심볼 필터 | 펼침/접힘 — `ab77001` (B6-PF). 7D/30D/90D/All chips + ticker filter |
+| (신규) Risk decomposition ✅ | `portfolio.getRiskFactors()` | factor 클릭 → 기여도 | beta/sector/geo factor exposure — `ff03458` (B6-PF). Stacked bar + click-to-highlight |
 
 ### 2.3 Geo Risk (`/geo`)
 
@@ -112,7 +112,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | Hotspots ranked | `geo.getHotspots()` | 클릭 → 지도 zoom | 다중 정렬 |
 | AffectedPortfolio | `geo.getAffected(portfolioId)` | 종목 클릭 → Detail | 시나리오 P&L (mild/severe) |
 | AIHedgeSuggestion | `ai.proposeHedge(exposure)` | "Simulate" → 모달 | **Claude API** |
-| (신규) Region drawer | 핀 클릭 시 슬라이드 | 사건 타임라인, 관련 ETF | — |
+| (신규) Region drawer ✅ | 핀 클릭 시 슬라이드 | 사건 타임라인, 관련 ETF | — `4ba4b2e` (B6-GE) + styles `2942c45`. WorldMap wrapper layers transparent click hit-areas over pin coordinates (stop-gap until primitive grows click API). `getRegionDetail(label)` mock keyed by ISO-2 prefix (UA/IL/IR/TW/KR/US/NG). Esc + backdrop close. |
 
 ### 2.4 Detail (`/detail/:symbol`)
 
@@ -129,8 +129,8 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | AIInvestmentGuide | `ai.getVerdict(symbol)` | "Why?" → 근거 라인 | **Claude API**, 5축 breakdown 클릭 |
 | AnalystTargets | `security.getTargets(symbol)` | hover → 분석사 분포 | 시간 trail |
 | Peers | `security.getPeers(symbol)` | 클릭 → 그 종목 Detail | 비교 metric 토글 |
-| (신규) Earnings & guidance | `security.getEarnings(symbol)` | 분기 클릭 | 컨센 vs 실적 |
-| (신규) Options chain mini | `security.getIVSurface(symbol)` | 만기/strike | IV 백분위, skew |
+| (신규) Earnings & guidance ✅ | `security.getEarnings(symbol)` | 분기 클릭 | 컨센 vs 실적 — `6dcbf36` (B6-DT). Per-quarter bar pair (est grey vs actual green/red, dashed orange for forward Q) + tabular history with surprise %. |
+| (신규) Options chain mini ✅ | `security.getIVSurface(symbol)` | 만기/strike | IV 백분위, skew — `7f3e1ec` (B6-DT). Heatmap (rows=expiries, cols=strikes), blue→white→red gradient, ATM strike highlighted. |
 
 ---
 
@@ -180,6 +180,14 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | B4-CI | GitHub Actions CI (lint + typecheck + build + Playwright) | `.github/workflows/ci.yml` | backend-api-data-engineer | 🟡 | |
 | B4-VR | 시각 회귀 (Percy/Chromatic 또는 자체 스크린샷 비교) | `app/tests/visual.spec.ts`, `app/tests/__screenshots__/`, `app/playwright.config.ts`, `app/package.json` | document-skills:webapp-testing | ✅ | 21 baselines = 6 routes × 3 viewports + 3 ⌘K overlays. Routes: /overview, /portfolio, /geo, /detail, /detail/AAPL, /settings. Viewports: 1440×900, 900×1100, 390×844. Determinism: `page.clock.install` pins time to 2026-04-30T13:42:18Z, freezeAnimations CSS injection nukes animation/transition/caret-color, waitForFetchSettled bails out after 8s for SSE-stuck routes (/geo). `toHaveScreenshot` defaults moved to playwright.config (animations:disabled, caret:hide, maxDiffPixelRatio:0.02). New scripts: `npm run test:visual` and `npm run test:visual:update`. Second-run all-green verified. Note: B4-RS landed mobile/tablet hamburger/grid changes during this work, so mobile+tablet baselines reflect post-RS layout; if RS continues to evolve, re-run `test:visual:update`. |
 | B4-UT | Vitest unit tests for `lib/format.ts` (10 pure formatters) | `app/vitest.config.ts`, `app/src/lib/format.test.ts`, `app/package.json` | frontend-ui-integrator | ✅ | 62 tests in ~140ms (`npm run test:unit`). One describe block per formatter — covers KRW/JPY decimal auto-zero, typographic minus (U+2212) vs ASCII hyphen toggle, decimals overrides, locale grouping, K/M/B/T volume buckets, every Range union variant, every English short month, mixed-sign formatChange. Intl-dependent assertions normalise narrow-no-break-space (U+202F) → regular space and use regex matchers to stay portable across ICU versions. Build still 223 modules / 400.85KB. (commits `75c9f7c` install · `818d1bf` config · `e029b86` first half · `3417606` second half) |
+
+### 배치 B6 — (신규) 5 sections (PLAN §2.2 / §2.3 / §2.4 신규 행)
+
+| ID | Task | 파일 | Agent | Status | Notes |
+|---|---|---|---|---|---|
+| B6-PF | Portfolio §2.2 신규: TradesLog + RiskDecomposition | `app/src/pages/portfolio/TradesLog.tsx`, `RiskDecomposition.tsx`, `index.tsx` | frontend-ui-integrator | ✅ | TradesLog `ab77001` · RiskDecomposition `ff03458`. Period chips + ticker filter; stacked-bar + click-to-highlight factor breakdown. |
+| B6-GE | Geo §2.3 신규: RegionDrawer + getRegionDetail + WorldMap pin clicks | `app/src/pages/geo/RegionDrawer.tsx`, `WorldMap.tsx`, `index.tsx`, `app/src/data/{geo,types}.ts`, `styles.css` | frontend-ui-integrator | ✅ | `4ba4b2e` (component+data) + `2942c45` (CSS). WorldMap wrapper layers transparent click buttons at projected pin coords (primitive doesn't expose onClick). RegionDetail mock keyed by ISO-2 (UA/IL/IR/TW/KR/US/NG). 360px right-edge slide-in (300ms), Esc + backdrop close, `prefers-reduced-motion` respected, mobile fills width. |
+| B6-DT | Detail §2.4 신규: EarningsGuidance + OptionsChainMini | `app/src/pages/detail/EarningsGuidance.tsx`, `OptionsChainMini.tsx`, `index.tsx` | frontend-ui-integrator | ✅ | EarningsGuidance `6dcbf36` · OptionsChainMini `7f3e1ec`. Per-quarter bar pair (est vs actual, dashed orange for forward Q) + tabular history with surprise %. IV heatmap rows=expiries × cols=strikes, blue→white→red gradient, ATM-strike highlighted. |
 
 ### 배치 B5 — 사용자/포트폴리오 영속화 (선택)
 
