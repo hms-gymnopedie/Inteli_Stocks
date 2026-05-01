@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-04-30 (B4-VR + B4-RS + B4-A11 병렬 완료 — 시각 회귀 / 반응형 / 접근성, 34/34 E2E)
+**Last updated:** 2026-04-30 (B4-CI + B4-UT + B6 병렬 완료 — CI / 유닛 테스트 / 신규 섹션 5개)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -248,7 +248,10 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 - ✅ **B4-VR** — 21 시각 회귀 baselines (6 routes × 3 viewports + 3 ⌘K overlays). `page.clock` 시간 고정 + freezeAnimations CSS 주입으로 결정성 확보. `npm run test:visual` / `test:visual:update`.
 - ✅ **B4-RS** — 5단계 breakpoint (1100/900/720/600/430): 사이드 rail collapse, KPI 4→2→1, Valuation 6→3→2, Holdings 가로 스크롤, 모바일 햄버거 nav.
 - ✅ **B4-A11** — `:focus-visible` orange 2px ring, skip-link → `<main id="main">`, focus trap 2개 (SymbolSearch · TweaksPanel) via `useFocusTrap`, ARIA tabs (HeroChart · MainChart · AIInsightsFeed roving tabindex + arrow keys), `role="switch"` 토글, `prefers-reduced-motion` 대응, contrast AA.
-- 🟡 **B4-E2E** — **34/34 통과** in 18.9s (smoke 6 + interactions 7 + visual 21). 잔여: format.ts unit tests.
+- ✅ **B4-E2E** — **34/34 통과** in 19.8s (smoke 6 + interactions 7 + visual 21).
+- ✅ **B4-UT** — Vitest + **62 unit tests** in 150ms (10 formatter 함수 × 평균 6 케이스). `npm run test:unit` / `:watch`.
+- ✅ **B4-CI** — GitHub Actions on push/PR: setup-node 22 → `npm ci` → `npm run build` → playwright chromium → functional E2E (visual 제외, macOS-snapshotted) → 실패 시 report artifact 업로드.
+- ✅ **B6 (5/5)** — 신규 섹션 모두 와이어링: Portfolio TradesLog (기간/심볼 필터) + RiskDecomposition (스택 바 + 클릭 highlight); Geo RegionDrawer (핀 클릭 → 슬라이드 패널, 이벤트 타임라인 + 관련 ETF, `getRegionDetail` mock); Detail EarningsGuidance + OptionsChainMini (IV heatmap).
 - 실행: `npm run dev` (root) → Vite :5180 + Express :3001. ⌘K 검색·`/detail/<TICKER>` 직접 URL·Tweaks Provider 셀렉트 모두 동작.
 
 - ✅ **Phase 1 완료 (7/7)** — 두 라운드에 걸쳐 모두 완료:
