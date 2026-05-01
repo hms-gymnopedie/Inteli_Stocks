@@ -19,13 +19,17 @@ jobs:
           cache: npm
 
       # npm workspaces: installs app/ and server/ deps in one shot.
-      # Using `npm install` (not `npm ci`) to work around npm/cli#4828:
-      # the macOS-generated package-lock.json omits @rollup/rollup-linux-x64-gnu
-      # so `npm ci` strictly skips the platform-specific optional binary,
-      # and Vite's build crashes resolving rollup's native module.
-      # `npm install` re-resolves optionals against the current platform.
+      # We delete package-lock.json before installing because of npm/cli#4828:
+      # the macOS-generated lockfile omits @rollup/rollup-linux-x64-gnu, and
+      # both `npm ci` AND `npm install` honor the lockfile's optional-dep
+      # tree, so the Linux binary stays missing and Vite's build crashes at
+      # rollup/dist/native.js. Regenerating the lockfile here makes npm
+      # re-resolve optionals against the runner's platform. Trade-off: we
+      # lose lockfile pinning in CI, but we keep functional builds.
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: |
+          rm -f package-lock.json
+          npm install --no-audit --no-fund
 
       # Root build script fans out: app (tsc -b + vite build) + server (tsc)
       - name: Build
