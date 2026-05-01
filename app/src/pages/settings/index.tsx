@@ -14,6 +14,7 @@
 import { useEffect, useState } from 'react';
 
 import { useTweaks } from '../../lib/tweaks';
+import { useAuth } from '../../lib/auth';
 
 // ─── Section 1: API keys ─────────────────────────────────────────────────────
 
@@ -349,6 +350,102 @@ function OtherTweaksSection() {
   );
 }
 
+// ─── Section 5: Supabase ─────────────────────────────────────────────────────
+
+/**
+ * Shows Supabase connection state + sign-out button.
+ *
+ * Three display states:
+ *   loading  — still fetching /api/auth/config (hide section entirely).
+ *   local    — Supabase not configured; show setup instructions.
+ *   supabase — configured; show URL, current user, sign-out button.
+ */
+function SupabaseSection() {
+  const { mode, user, signOut } = useAuth();
+
+  // Fetch the public config so we can show the project URL
+  const [url,     setUrl]     = useState<string | null>(null);
+  const [signing, setSigning] = useState(false);
+
+  useEffect(() => {
+    if (mode !== 'supabase') return;
+    void fetch('/api/auth/config')
+      .then((r) => r.json() as Promise<{ url: string | null }>)
+      .then((cfg) => setUrl(cfg.url ?? null))
+      .catch(() => { /* ignore */ });
+  }, [mode]);
+
+  // Don't render while still loading
+  if (mode === 'loading') return null;
+
+  return (
+    <section className="settings-section">
+      <h2 className="settings-section-h">Supabase</h2>
+
+      {mode === 'local' ? (
+        <>
+          <p className="settings-section-desc">
+            <span className="settings-key-badge off">○ not configured</span>{' '}
+            The dashboard is running in <strong>local mode</strong> — portfolio
+            data is stored at <code>~/.intelistock/portfolio.json</code> and no
+            login is required.
+          </p>
+          <p className="settings-section-desc">
+            To enable multi-device sync and authentication, set the following
+            environment variables in your <code>.env</code> file and restart:
+          </p>
+          <pre className="settings-code">
+{`SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=<public anon key>
+SUPABASE_SERVICE_ROLE_KEY=<service role key>`}
+          </pre>
+          <p className="settings-section-desc">
+            Then apply the migration in{' '}
+            <code>server/migrations/001_portfolios.sql</code> via the Supabase
+            SQL editor. See <code>server/migrations/README.md</code> for details.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="settings-section-desc">
+            <span className="settings-key-badge on">● configured</span>{' '}
+            Connected to Supabase. Portfolio data is synced per user.
+          </p>
+          {url && (
+            <div className="settings-foot">
+              Project URL: <code>{url}</code>
+            </div>
+          )}
+          {user ? (
+            <div className="settings-tw-row" style={{ marginTop: '0.75rem' }}>
+              <span className="settings-tw-label">
+                Signed in as{' '}
+                <code>{user.email ?? user.id}</code>
+              </span>
+              <button
+                type="button"
+                className="settings-btn-danger"
+                disabled={signing}
+                onClick={() => {
+                  setSigning(true);
+                  void signOut().finally(() => setSigning(false));
+                }}
+              >
+                {signing ? 'Signing out…' : 'Sign out'}
+              </button>
+            </div>
+          ) : (
+            <p className="settings-section-desc muted">
+              Not signed in.{' '}
+              <a href="/login" className="auth-link">Sign in</a>
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export function Settings() {
@@ -366,6 +463,7 @@ export function Settings() {
         <DataExportSection />
         <RefreshSection />
         <OtherTweaksSection />
+        <SupabaseSection />
       </div>
     </div>
   );
