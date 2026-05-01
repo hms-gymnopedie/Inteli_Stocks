@@ -13,11 +13,6 @@ interface Props {
   meta: AIMeta | null;
 }
 
-function fmt(n: number): string {
-  if (n < 1_000) return String(n);
-  return `${(n / 1_000).toFixed(n < 10_000 ? 2 : 1)}k`;
-}
-
 export function AITokenFooter({ meta }: Props) {
   if (!meta) return null;
   if (meta.usage.totalTokens === 0 && meta.model === 'mock') {
@@ -29,12 +24,6 @@ export function AITokenFooter({ meta }: Props) {
   }
 
   const u = meta.usage;
-  const cachedPart = u.cachedReadTokens
-    ? ` (${fmt(u.cachedReadTokens)} cached)`
-    : '';
-  const writePart = u.cachedWriteTokens
-    ? ` · ${fmt(u.cachedWriteTokens)} cache-write`
-    : '';
   const cost = estimateCost(meta);
 
   // Tooltip with the precise breakdown.
@@ -60,11 +49,10 @@ export function AITokenFooter({ meta }: Props) {
   return (
     <div className="ai-token-footer" title={tooltip}>
       <span className="ai-token-numbers">
-        {fmt(u.inputTokens)}{cachedPart} in · {fmt(u.outputTokens)} out
+        {u.totalTokens.toLocaleString()} tokens
       </span>
       <span className="ai-token-divider">·</span>
       <span className="ai-token-model">{meta.model}</span>
-      {writePart}
       {cost != null && (
         <>
           <span className="ai-token-divider">·</span>
