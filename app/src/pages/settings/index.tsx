@@ -13,6 +13,9 @@
 
 import { useEffect, useState } from 'react';
 
+import { getModels } from '../../data/ai';
+import type { AIModelsResponse, AIProvider } from '../../data/types';
+import { PRICING, formatUSD, sampleCallCost } from '../../lib/aiPricing';
 import { useTweaks } from '../../lib/tweaks';
 import { useAuth } from '../../lib/auth';
 
@@ -240,6 +243,142 @@ function RefreshSection() {
   );
 }
 
+// ─── Section: AI Models ─────────────────────────────────────────────────────
+
+function AIModelsSection() {
+  const { values, setTweak } = useTweaks();
+  const [catalogue, setCatalogue] = useState<AIModelsResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getModels().then((cat) => {
+      if (!cancelled) setCatalogue(cat);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Active selection — fall back to backend's defaultProvider, then the
+  // first provider listed in the catalogue, then 'gemini' as a last resort.
+  const activeProvider: AIProvider =
+    values.aiProvider ??
+    catalogue?.defaultProvider ??
+    catalogue?.providers[0]?.id ??
+    'gemini';
+
+  // Active model resolves through Tweaks → provider's `default: true` model
+  // → first model in that provider's list.
+  const activeProviderInfo = catalogue?.providers.find((p) => p.id === activeProvider);
+  const providerDefaultModel =
+    activeProviderInfo?.models.find((m) => m.default)?.id ??
+    activeProviderInfo?.models[0]?.id ??
+    '';
+  const activeModel = values.aiModel ?? providerDefaultModel;
+
+  function selectModel(provider: AIProvider, modelId: string): void {
+    setTweak('aiProvider', provider);
+    setTweak('aiModel', modelId);
+  }
+
+  function clearOverride(): void {
+    setTweak('aiProvider', null);
+    setTweak('aiModel', null);
+  }
+
+  return (
+    <section className="settings-section settings-section--wide">
+      <h2 className="settings-section-h">AI Models</h2>
+      <p className="settings-section-desc">
+        Choose which model handles AI calls (signals, insights, verdict,
+        hedge). Pricing is per 1 M tokens; the per-call estimate uses a
+        typical 600-input / 400-output payload from this dashboard. Models
+        from providers without a key are disabled — set the key under
+        <strong> API Keys</strong> first.
+      </p>
+
+      {!catalogue ? (
+        <div className="settings-foot">Loading catalogue…</div>
+      ) : (
+        <>
+          {catalogue.providers.map((p) => (
+            <div key={p.id} className="ai-models-provider">
+              <div className="ai-models-provider-h">
+                <span>{p.label}</span>
+                {p.configured ? (
+                  <span className="settings-key-badge on">● configured</span>
+                ) : (
+                  <span className="settings-key-badge off">○ key not set</span>
+                )}
+              </div>
+              <div className="ai-models-grid">
+                {p.models.map((m) => {
+                  const active = activeProvider === p.id && activeModel === m.id;
+                  const pricing = PRICING[m.id];
+                  const sample = sampleCallCost(m.id);
+                  const disabled = !p.configured;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className={`ai-model-card ${active ? 'active' : ''}`}
+                      onClick={() => selectModel(p.id, m.id)}
+                      disabled={disabled}
+                      aria-pressed={active}
+                    >
+                      <div className="ai-model-name">
+                        {m.label}
+                        {m.default && (
+                          <span className="ai-model-tag default">DEFAULT</span>
+                        )}
+                        {pricing?.estimated && (
+                          <span className="ai-model-tag preview">EST</span>
+                        )}
+                      </div>
+                      <div className="ai-model-id">{m.id}</div>
+                      {pricing ? (
+                        <>
+                          <div className="ai-model-pricing">
+                            <span>${pricing.input}/M in</span>
+                            <span className="muted">·</span>
+                            <span>${pricing.output}/M out</span>
+                          </div>
+                          {sample != null && (
+                            <div className="ai-model-sample">
+                              ≈ {formatUSD(sample)} / call
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="ai-model-pricing muted">
+                          pricing unknown
+                        </div>
+                      )}
+                      {active && <span className="ai-model-badge">Active</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          <div className="settings-actions">
+            <button
+              type="button"
+              onClick={clearOverride}
+              className="settings-btn-link"
+              title="Clear your override so the backend's default takes effect"
+            >
+              Use backend default
+            </button>
+            <span className="settings-msg">
+              Active: <code>{activeProvider}</code> ·{' '}
+              <code>{activeModel || '—'}</code>
+            </span>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 // ─── Section 4: Other tweaks ────────────────────────────────────────────────
 
 function OtherTweaksSection() {
@@ -462,6 +601,7 @@ export function Settings() {
         <ApiKeysSection />
         <DataExportSection />
         <RefreshSection />
+        <AIModelsSection />
         <OtherTweaksSection />
         <SupabaseSection />
       </div>

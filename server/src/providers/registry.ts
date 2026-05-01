@@ -58,9 +58,10 @@ const PROVIDERS: ProviderEntry[] = [
     id: 'gemini',
     label: 'Google',
     models: [
-      { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash',      default: true },
-      { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro'                       },
-      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite'                },
+      { id: 'gemini-3.1-flash-lite-preview', label: 'Gemini 3.1 Flash Lite (preview)', default: true },
+      { id: 'gemini-2.5-flash',              label: 'Gemini 2.5 Flash'                                },
+      { id: 'gemini-2.5-pro',                label: 'Gemini 2.5 Pro'                                  },
+      { id: 'gemini-2.5-flash-lite',         label: 'Gemini 2.5 Flash Lite'                           },
     ],
   },
   {

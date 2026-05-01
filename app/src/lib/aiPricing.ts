@@ -19,7 +19,7 @@
 
 import type { AIMeta } from '../data/types';
 
-interface ModelPricing {
+export interface ModelPricing {
   /** USD per 1 M input tokens (full price). */
   input: number;
   /** USD per 1 M output tokens. */
@@ -28,9 +28,11 @@ interface ModelPricing {
   cacheRead?: number;
   /** USD per 1 M cache-creation tokens (Anthropic only, ~+25% surcharge). */
   cacheWrite?: number;
+  /** When true, the price is a placeholder (preview/unannounced model). */
+  estimated?: boolean;
 }
 
-const PRICING: Record<string, ModelPricing> = {
+export const PRICING: Record<string, ModelPricing> = {
   // ── Anthropic Claude ──────────────────────────────────────────────────────
   'claude-opus-4-7':            { input: 15.00, output: 75.00, cacheRead: 1.50,  cacheWrite: 18.75 },
   'claude-sonnet-4-6':          { input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 },
@@ -43,7 +45,23 @@ const PRICING: Record<string, ModelPricing> = {
   'gemini-2.5-pro':             { input:  1.25, output: 10.00, cacheRead: 0.3125  },
   'gemini-2.5-flash':           { input:  0.075, output: 0.30, cacheRead: 0.01875 },
   'gemini-2.5-flash-lite':      { input:  0.04,  output: 0.15, cacheRead: 0.01    },
+
+  // ── Google Gemini 3.1 (preview) ──────────────────────────────────────────
+  // Pricing not yet officially announced; use 2.5 Flash Lite rates as a
+  // placeholder. Update this entry when Google publishes Gemini 3.1 pricing.
+  'gemini-3.1-flash-lite-preview': { input: 0.04, output: 0.15, cacheRead: 0.01, estimated: true },
 };
+
+/**
+ * Returns the cost of a "typical" call for a given model — 600 input + 400
+ * output tokens, no cache hits. Used by the Settings AI Models cards to
+ * give a quick "how much per call" reference.
+ */
+export function sampleCallCost(modelId: string): number | null {
+  const p = PRICING[modelId];
+  if (!p) return null;
+  return (600 * p.input + 400 * p.output) / 1_000_000;
+}
 
 /**
  * Returns the estimated cost in USD for a single LLM response, or null when
