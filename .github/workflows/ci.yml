@@ -18,9 +18,14 @@ jobs:
           # cache: npm uses the root package-lock.json (npm workspaces)
           cache: npm
 
-      # npm workspaces: installs app/ and server/ deps in one shot
+      # npm workspaces: installs app/ and server/ deps in one shot.
+      # Using `npm install` (not `npm ci`) to work around npm/cli#4828:
+      # the macOS-generated package-lock.json omits @rollup/rollup-linux-x64-gnu
+      # so `npm ci` strictly skips the platform-specific optional binary,
+      # and Vite's build crashes resolving rollup's native module.
+      # `npm install` re-resolves optionals against the current platform.
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       # Root build script fans out: app (tsc -b + vite build) + server (tsc)
       - name: Build
