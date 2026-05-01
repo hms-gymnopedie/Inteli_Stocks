@@ -1,4 +1,12 @@
-import { useEffect, useState, useSyncExternalStore, type DependencyList } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type DependencyList,
+} from 'react';
+import { cacheGet, cacheSet } from './cache';
 import {
   getManualRefreshTick,
   getRefreshInterval,
@@ -40,20 +48,25 @@ function useManualRefreshTick(): number {
 
 /**
  * Minimal Promise→React-state adapter for the data layer's async fetchers.
- * Cancellation safe; supports background polling at the user-configured
- * Settings.refreshInterval (default 10 min). Skips polling while the tab is
- * hidden so we don't burn API quota on a backgrounded window.
+ *
+ * Three optimisations layered on top of the basic fetch:
+ *   1. **In-memory cache** keyed by `fn.toString()+JSON.stringify(deps)` —
+ *      survives navigation within the tab. Initial render hydrates from
+ *      the cache so revisiting a page never shows skeletons again.
+ *   2. **Fresh-cache skip** — if the cached entry is younger than the
+ *      polling interval (or polling is Off and any cache exists), the
+ *      mount-time fetch is skipped entirely. Polling and manual refresh
+ *      still fire on schedule.
+ *   3. **Background refresh** — when a fetch fires while data is already
+ *      on screen, the loading flag stays false so the UI doesn't flicker.
+ *
+ * Cancellation-safe; pauses polling while the tab is hidden.
  */
 export function useAsync<T>(
   fn: () => Promise<T>,
   deps: DependencyList = [],
   { poll = true }: UseAsyncOpts = {},
 ): AsyncState<T> {
-  const [state, setState] = useState<AsyncState<T>>({
-    data: undefined,
-    loading: true,
-    error: undefined,
-  });
   const globalInterval = useGlobalRefreshInterval();
   const manualTick     = useManualRefreshTick();
   const intervalMs =
@@ -64,6 +77,28 @@ export function useAsync<T>(
   // (Static-data fetchers will refetch when the user presses Refresh, which
   // is the expected behaviour.)
 
+  // Stable cache key. fn.toString() captures the call-site source (incl.
+  // any inline literals like the macro-keys array). deps cover the closure
+  // bindings (symbol, range, etc.). Together they uniquely identify a fetch.
+  const cacheKey = useMemo(
+    () => `${fn.toString()}|${JSON.stringify(deps)}`,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fn, ...deps],
+  );
+
+  // Initial state hydrates from cache when present — revisiting a page
+  // shows the prior data instantly with no skeleton flash.
+  const [state, setState] = useState<AsyncState<T>>(() => {
+    const c = cacheGet<T>(cacheKey);
+    return c
+      ? { data: c.data, loading: false, error: undefined }
+      : { data: undefined, loading: true, error: undefined };
+  });
+
+  // Track manualTick across renders so we can detect "user just clicked
+  // Refresh" inside the effect and force a fetch even when cache is fresh.
+  const lastManualTick = useRef(manualTick);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -73,14 +108,28 @@ export function useAsync<T>(
       }
       fn()
         .then((data) => {
-          if (!cancelled) setState({ data, loading: false, error: undefined });
+          if (cancelled) return;
+          cacheSet(cacheKey, data);
+          setState({ data, loading: false, error: undefined });
         })
         .catch((error: Error) => {
           if (!cancelled) setState((s) => ({ ...s, loading: false, error }));
         });
     }
 
-    run(true);
+    const isManualRefresh = manualTick > lastManualTick.current;
+    lastManualTick.current = manualTick;
+
+    const cached = cacheGet<T>(cacheKey);
+    const ageMs  = cached ? Date.now() - cached.ts : Infinity;
+    // Cache is "fresh" when polling is off (treat as fresh forever) OR when
+    // it's younger than one interval. Either skips the mount-time fetch.
+    const fresh =
+      cached !== undefined && (intervalMs === 0 || ageMs < intervalMs);
+
+    if (isManualRefresh || !fresh) {
+      run(cached === undefined);
+    }
 
     if (intervalMs <= 0) {
       return () => { cancelled = true; };
@@ -118,7 +167,7 @@ export function useAsync<T>(
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, intervalMs, manualTick]);
+  }, [cacheKey, intervalMs, manualTick]);
 
   return state;
 }
