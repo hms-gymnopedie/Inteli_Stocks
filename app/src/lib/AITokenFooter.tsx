@@ -1,12 +1,13 @@
 /**
- * Compact "Used N in / M out · model" footer for AI section cards.
+ * Compact "Used N in / M out · model · ≈$cost" footer for AI section cards.
  *
- * Auto-suppressed when meta is null or shows the synthetic mock-mode meta
- * (totalTokens === 0 + model === 'mock'). Hover for the full detail
- * including cache hits/writes.
+ * Auto-suppressed when meta is null. Mock-mode meta renders as a faint
+ * "mock fallback" line. Hover for the precise breakdown including cache
+ * hits/writes and per-token-class spend.
  */
 
 import type { AIMeta } from '../data/types';
+import { estimateCost, formatUSD } from './aiPricing';
 
 interface Props {
   meta: AIMeta | null;
@@ -34,6 +35,7 @@ export function AITokenFooter({ meta }: Props) {
   const writePart = u.cachedWriteTokens
     ? ` · ${fmt(u.cachedWriteTokens)} cache-write`
     : '';
+  const cost = estimateCost(meta);
 
   // Tooltip with the precise breakdown.
   const tooltip = [
@@ -48,6 +50,9 @@ export function AITokenFooter({ meta }: Props) {
     u.cachedWriteTokens != null
       ? `cache-write: ${u.cachedWriteTokens.toLocaleString()}`
       : '',
+    cost != null
+      ? `cost: ≈ ${formatUSD(cost)} (estimated, see lib/aiPricing.ts)`
+      : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -60,6 +65,12 @@ export function AITokenFooter({ meta }: Props) {
       <span className="ai-token-divider">·</span>
       <span className="ai-token-model">{meta.model}</span>
       {writePart}
+      {cost != null && (
+        <>
+          <span className="ai-token-divider">·</span>
+          <span className="ai-token-cost">≈ {formatUSD(cost)}</span>
+        </>
+      )}
     </div>
   );
 }

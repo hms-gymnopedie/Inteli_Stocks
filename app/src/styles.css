@@ -2022,3 +2022,5 @@ svg [data-pin='true']:focus-visible {
 .ai-token-numbers     { color: var(--fg-2); }
 .ai-token-divider     { color: var(--fg-4); }
 .ai-token-model       { color: var(--orange); text-transform: lowercase; }
+
+.ai-token-cost { color: var(--up); font-variant-numeric: tabular-nums; }

@@ -45,7 +45,24 @@ interface ProviderEntry {
   models: AIModelInfo[];
 }
 
+// Gemini listed first because it's the primary provider for this user;
+// Tweaks panel renders providers in this order so the dropdown defaults to
+// Google and Anthropic appears second.
+//
+// Default model per provider is Flash for Gemini — for the short structured
+// JSON outputs this dashboard generates (signals / insights / verdict /
+// hedge), Flash matches Pro quality at ~10× lower cost. Users can switch
+// to Pro from the Tweaks panel for a single call.
 const PROVIDERS: ProviderEntry[] = [
+  {
+    id: 'gemini',
+    label: 'Google',
+    models: [
+      { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash',      default: true },
+      { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro'                       },
+      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite'                },
+    ],
+  },
   {
     id: 'anthropic',
     label: 'Anthropic',
@@ -53,15 +70,6 @@ const PROVIDERS: ProviderEntry[] = [
       { id: 'claude-opus-4-7',           label: 'Claude Opus 4.7',  default: true },
       { id: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6'                },
       { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5'                 },
-    ],
-  },
-  {
-    id: 'gemini',
-    label: 'Google',
-    models: [
-      { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro',        default: true },
-      { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash'                      },
-      { id: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash Lite'                 },
     ],
   },
 ];
