@@ -7,6 +7,8 @@ import { portfolio } from './routes/portfolio.js';
 import { macro } from './routes/macro.js';
 import { ai } from './routes/ai.js';
 import { settings } from './routes/settings.js';
+import { auth } from './routes/auth.js';
+import { requireAuth } from './auth.js';
 
 const app = express();
 
@@ -17,9 +19,13 @@ app.use(express.json());
 
 // --- Routes ---
 app.use('/api/health',    health);
+app.use('/api/auth',      auth);      // B5-AU — /me + /config (no auth gate)
 app.use('/api/market',    market);    // B2-MD
 app.use('/api/security',  security);  // B2-MD + B2-SEC (filings)
-app.use('/api/portfolio', portfolio); // B2-MD
+// B5-CR — portfolio routes run behind requireAuth.
+// In local mode requireAuth is a no-op (req.user=null), so local-file path
+// is preserved. In Supabase mode it validates the JWT and populates req.user.
+app.use('/api/portfolio', requireAuth, portfolio); // B2-MD + B5-CR
 app.use('/api/macro',     macro);     // B2-FRED
 app.use('/api/ai',        ai);        // B2-AI
 app.use('/api/settings',  settings);  // Settings page backend
