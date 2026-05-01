@@ -1512,3 +1512,290 @@ body .muted {
 }
 
 /* === END NEW SECTIONS (B6) === */
+
+/* === AUTH + SUPABASE (B5-AU) === */
+
+/* ─── Login page ─────────────────────────────────────────────────────────── */
+
+.auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--panel);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 28px 24px 24px;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--fg-2);
+  margin-bottom: 20px;
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: 20px;
+}
+
+.auth-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-3);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.12s, border-color 0.12s;
+  margin-bottom: -1px;
+}
+
+.auth-tab:hover {
+  color: var(--fg);
+}
+
+.auth-tab.active {
+  color: var(--fg);
+  border-bottom-color: var(--orange);
+}
+
+.auth-tab:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.auth-field label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--fg-3);
+  text-transform: uppercase;
+}
+
+.auth-field input {
+  background: var(--panel-2);
+  border: 1px solid var(--hairline-2);
+  border-radius: 3px;
+  color: var(--fg);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.12s;
+}
+
+.auth-field input:focus {
+  border-color: var(--orange);
+}
+
+.auth-field input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.auth-error {
+  background: rgba(226, 94, 94, 0.1);
+  border: 1px solid rgba(226, 94, 94, 0.4);
+  border-radius: 3px;
+  color: #e25e5e;
+  font-size: 11px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+}
+
+.auth-submit {
+  width: 100%;
+  background: var(--orange);
+  border: none;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.12s;
+  margin-top: 4px;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: var(--orange-soft);
+}
+
+.auth-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.auth-submit:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+.auth-foot {
+  margin-top: 16px;
+  font-size: 11px;
+  color: var(--fg-3);
+  text-align: center;
+}
+
+.auth-link {
+  background: none;
+  border: none;
+  color: var(--orange);
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.auth-link:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ─── Auth chip (topbar) ─────────────────────────────────────────────────── */
+
+.auth-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--hairline-2);
+  border-radius: 3px;
+  padding: 2px 6px 2px 8px;
+  font-size: 10px;
+  color: var(--fg-2);
+  max-width: 160px;
+  overflow: hidden;
+}
+
+.auth-chip-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.auth-chip-signout {
+  background: none;
+  border: none;
+  color: var(--fg-3);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 1px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+
+.auth-chip-signout:hover {
+  color: var(--orange);
+}
+
+.auth-chip-signout:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* ─── Settings Supabase section extras ───────────────────────────────────── */
+
+.settings-code {
+  background: var(--panel-2);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  color: var(--fg-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.7;
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* === END AUTH + SUPABASE (B5-AU) === */
+
+/* === WORLDMAP-2 (B2-MAP-2) === */
+/* Reset-zoom button overlaid on the map. Sits in the top-right corner of the
+   map area; only rendered when the transform is off-identity (handled in JS).
+   Mirrors `.geo-overlays`'s 14px inset and the existing `.chip` look so it
+   reads as part of the map UI rather than a foreign element. */
+.worldmap-reset {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 4;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.worldmap-reset:hover {
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--orange);
+  border-color: var(--orange);
+}
+
+.worldmap-reset:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+/* Pin focus ring inside the SVG. The pin `<g role="button">` itself is the
+   focusable element; we draw a subtle 2px outline via `outline` (works in
+   SVG2-supporting browsers) and fall back to a stroke on the inner halo for
+   the rest. */
+svg [data-pin='true']:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+
+/* When the SVG itself receives keyboard focus (for arrow/+/-/0 shortcuts),
+   draw the same orange ring used elsewhere in the app. Crops to the SVG box. */
+.geo-map-wrap svg:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: -2px;
+}
+/* === END WORLDMAP-2 === */
