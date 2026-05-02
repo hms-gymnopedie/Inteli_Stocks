@@ -9,6 +9,7 @@ import { ai } from './routes/ai.js';
 import { settings } from './routes/settings.js';
 import { auth } from './routes/auth.js';
 import { googleRouter } from './routes/google.js';
+import { sim } from './routes/sim.js';
 import { requireAuth } from './auth.js';
 
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/macro',     macro);     // B2-FRED
 app.use('/api/ai',        ai);        // B2-AI
 app.use('/api/settings',  settings);  // Settings page backend
 app.use('/api/google',    googleRouter); // B5-GS — OAuth + Sheets sync
+app.use('/api/sim',       sim);          // B8-SIM — strategy backtest + leaderboard
 
 // --- Start ---
 const port = Number(process.env.PORT ?? 3001);
