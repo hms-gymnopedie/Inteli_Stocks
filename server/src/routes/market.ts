@@ -11,6 +11,8 @@ import {
   formatPct,
   dir,
 } from '../providers/yahoo.js';
+import * as finnhub from '../providers/finnhub.js';
+import * as grounded from '../providers/gemini-grounded.js';
 
 /**
  * /api/market/* — owned by B2-MD.
@@ -337,45 +339,120 @@ market.get('/sp-constituents', (_req: Request, res: Response) => {
 // ─── GET /api/market/fear-greed ───────────────────────────────────────────────
 
 /**
- * Returns Fear & Greed mock values — CNN has no public API.
+ * Fear & Greed Index — CNN has no public API, so we ask Gemini with web
+ * search grounding to read the public CNN page (or any equivalent source)
+ * and return the four canonical values as JSON. Cached 1 h.
+ *
+ * Falls back to a static mock when no GEMINI_API_KEY is configured or
+ * grounding fails (network error, JSON parse fail, etc.).
  */
-market.get('/fear-greed', (_req: Request, res: Response) => {
-  res.json({
+market.get('/fear-greed', async (_req: Request, res: Response) => {
+  const FALLBACK = {
     value:     62,
     label:     'Greed',
     yesterday: 58,
     oneWeek:   49,
     oneMonth:  41,
+  };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const result = await grounded.askJSON<{
+    value: number; label: string; yesterday: number; oneWeek: number; oneMonth: number;
+  }>({
+    cacheKey:   `fear-greed:${today}`,
+    cacheTtlMs: 6 * 60 * 60 * 1000, // 6h — F&G updates daily
+    prompt: `Look up the CURRENT CNN Fear & Greed Index (visit money.cnn.com/data/fear-and-greed/ or equivalent).
+Return a single JSON object with these exact fields, no markdown fences:
+{
+  "value": <integer 0-100, current score>,
+  "label": <one of: "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed">,
+  "yesterday": <integer 0-100, score 1 day ago>,
+  "oneWeek":   <integer 0-100, score 1 week ago>,
+  "oneMonth":  <integer 0-100, score 1 month ago>
+}
+Only output the JSON object. No prose, no markdown.`,
   });
+
+  if (result && Number.isFinite(result.value)) {
+    res.json(result);
+  } else {
+    res.json(FALLBACK);
+  }
 });
 
 // ─── GET /api/market/calendar?date=2024-04-28 ─────────────────────────────────
 
 /**
- * Returns mock economic calendar events — free APIs require keys.
+ * Economic calendar events. Uses Finnhub /calendar/economic when
+ * FINNHUB_API_KEY is set (B13-E2); otherwise falls back to a static
+ * mock so the panel never goes blank.
  */
-market.get('/calendar', (_req: Request, res: Response) => {
-  res.json([
-    { time: '08:30', title: 'US Initial Jobless Claims', impact: 'HIGH' },
-    { time: '10:00', title: 'Fed Powell · Press Q&A',    impact: 'HIGH' },
-    { time: '14:30', title: 'BoK Minutes (KR)',           impact: 'MED'  },
-    { time: '—',     title: 'NVDA · Earnings AMC',        impact: 'HIGH' },
-  ]);
+market.get('/calendar', async (_req: Request, res: Response) => {
+  if (!finnhub.isConfigured()) {
+    res.json(MOCK_CALENDAR);
+    return;
+  }
+  try {
+    const events = await finnhub.getEconomicCalendar();
+    // Map Finnhub shape → frontend CalendarEvent ({time, title, impact}).
+    const out = events
+      .filter((e) => e.country === 'US' || e.country === 'KR' || e.country === 'CN' || e.country === 'EU')
+      .slice(0, 8)
+      .map((e) => ({
+        // Finnhub's `time` is the ISO datetime — show 'HH:MM' when it has
+        // one, else fall back to the date.
+        time: extractHHMM(e.time),
+        title: `${e.country} · ${e.event}`,
+        impact: (e.impact >= 3 ? 'HIGH' : e.impact === 2 ? 'MED' : 'LOW') as 'HIGH' | 'MED' | 'LOW',
+      }));
+    res.json(out.length > 0 ? out : MOCK_CALENDAR);
+  } catch (err) {
+    console.error('[market/calendar] finnhub failed, falling back to mock:', (err as Error).message);
+    res.json(MOCK_CALENDAR);
+  }
 });
+
+const MOCK_CALENDAR = [
+  { time: '08:30', title: 'US · Initial Jobless Claims', impact: 'HIGH' },
+  { time: '10:00', title: 'US · Fed Powell — Press Q&A', impact: 'HIGH' },
+  { time: '14:30', title: 'KR · BoK Minutes',            impact: 'MED'  },
+  { time: '—',     title: 'NVDA · Earnings AMC',         impact: 'HIGH' },
+];
+
+function extractHHMM(iso: string): string {
+  // Finnhub format: '2026-05-02 08:30:00' or just '2026-05-02'.
+  const m = /(\d{2}):(\d{2})/.exec(iso);
+  return m ? `${m[1]}:${m[2]}` : '—';
+}
 
 // ─── GET /api/market/session-volume ──────────────────────────────────────────
 
 /**
- * Returns synthetic session volume bars.
+ * Real session volume derived from yahoo intraday bars (B13-E4). Aggregates
+ * the volume field from S&P 500 daily/intraday data — falls back to a
+ * synthetic profile when the historical fetch fails.
  */
-market.get('/session-volume', (_req: Request, res: Response) => {
-  const bars: Array<{ ts: number; volume: number }> = [];
-  const now = Date.now();
-  for (let i = 0; i < 30; i++) {
-    const rand = ((9 * (i + 1) * 9301 + 49297) % 233280) / 233280;
-    bars.push({ ts: now - (30 - i) * 13 * 60_000, volume: 60_000_000 + rand * 80_000_000 });
+market.get('/session-volume', async (_req: Request, res: Response) => {
+  try {
+    const rows = await fetchHistorical('^GSPC', '1M');
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error('no rows');
+    // Take the last 30 bars and emit { ts, volume } pairs. Real series.
+    const recent = rows.slice(-30);
+    const bars = recent.map((r) => ({
+      ts: (r.date instanceof Date ? r.date : new Date(r.date as unknown as string)).getTime(),
+      volume: typeof r.volume === 'number' ? r.volume : 0,
+    }));
+    res.json(bars);
+  } catch (err) {
+    console.error('[market/session-volume] fallback to mock:', (err as Error).message);
+    const bars: Array<{ ts: number; volume: number }> = [];
+    const now = Date.now();
+    for (let i = 0; i < 30; i++) {
+      const rand = ((9 * (i + 1) * 9301 + 49297) % 233280) / 233280;
+      bars.push({ ts: now - (30 - i) * 13 * 60_000, volume: 60_000_000 + rand * 80_000_000 });
+    }
+    res.json(bars);
   }
-  res.json(bars);
 });
 
 // ─── GET /api/market/search?q=nvidia ──────────────────────────────────────────

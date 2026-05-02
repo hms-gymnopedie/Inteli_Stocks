@@ -160,27 +160,62 @@ const MOCK_ALERTS: RiskAlert[] = [
 
 // ─── Exported fetchers ────────────────────────────────────────────────────────
 
+interface GeoState {
+  heat: Record<string, 'low' | 'med' | 'high'>;
+  pins: typeof MOCK_RISK_MAP.pins;
+  flows: typeof MOCK_RISK_MAP.flows;
+  hotspots: RiskHotspot[];
+  alerts: RiskAlert[];
+  layers: MapLayer[];
+  globalIndex: GlobalRiskIndex;
+}
+
+/** Cached state promise so the four getRiskMap/getHotspots/etc. fetchers
+ *  share a single backend call per page load. */
+let _statePromise: Promise<GeoState> | null = null;
+function fetchState(): Promise<GeoState> {
+  if (_statePromise) return _statePromise;
+  _statePromise = fetch('/api/geo/state')
+    .then(async (r) => {
+      if (!r.ok) throw new Error(`/api/geo/state ${r.status}`);
+      return r.json() as Promise<GeoState>;
+    })
+    .catch((err) => {
+      console.warn('[geo] backend fetch failed, falling back to inline mocks:', err);
+      return {
+        heat: MOCK_RISK_MAP.heat as Record<string, 'low' | 'med' | 'high'>,
+        pins: MOCK_RISK_MAP.pins,
+        flows: MOCK_RISK_MAP.flows,
+        hotspots: MOCK_HOTSPOTS,
+        alerts: MOCK_ALERTS,
+        layers: MOCK_LAYERS,
+        globalIndex: MOCK_GLOBAL_INDEX,
+      };
+    });
+  return _statePromise;
+}
+
 /** Returns the full risk map data (heat, pins, flows) for WorldMap. */
 export async function getRiskMap(): Promise<RiskMapEntry> {
-  await delay();
-  return MOCK_RISK_MAP;
+  const s = await fetchState();
+  return { heat: s.heat, pins: s.pins, flows: s.flows };
 }
 
 /** Returns the global risk index (value, delta, note). */
 export async function getGlobalIndex(): Promise<GlobalRiskIndex> {
-  await delay();
-  return MOCK_GLOBAL_INDEX;
+  const s = await fetchState();
+  return s.globalIndex;
 }
 
 /** Returns active geopolitical hotspots ranked by impact. */
 export async function getHotspots(): Promise<RiskHotspot[]> {
-  await delay();
-  return MOCK_HOTSPOTS;
+  const s = await fetchState();
+  return s.hotspots;
 }
 
 /**
  * Returns portfolio holdings affected by geo risk scenarios.
- * The `portfolioId` parameter is reserved for multi-portfolio support in B5.
+ * Mock-only — no real source. Reserved for multi-portfolio support in B5.
  */
 export async function getAffected(_portfolioId: string): Promise<AffectedHolding[]> {
   await delay();
@@ -189,8 +224,8 @@ export async function getAffected(_portfolioId: string): Promise<AffectedHolding
 
 /** Returns the current map layer toggle configuration. */
 export async function getLayers(): Promise<MapLayer[]> {
-  await delay();
-  return MOCK_LAYERS;
+  const s = await fetchState();
+  return s.layers;
 }
 
 // Region detail keyed by ISO-2 prefix in the pin label (e.g. "TW · TENSION"
@@ -305,15 +340,18 @@ const MOCK_REGION_DETAIL: Record<string, Omit<RegionDetail, 'label'>> = {
  * still render the drawer header (label + level chip) without breaking.
  */
 export async function getRegionDetail(label: string): Promise<RegionDetail> {
-  await delay();
+  try {
+    const r = await fetch(`/api/geo/region/${encodeURIComponent(label)}`);
+    if (r.ok) return (await r.json()) as RegionDetail;
+  } catch {
+    /* fall through to mock */
+  }
   const key = label.split('·')[0]?.trim().toUpperCase() ?? '';
   const entry = MOCK_REGION_DETAIL[key];
   if (entry) return { label, ...entry };
   return {
     label,
-    events: [
-      { date: 'TODAY', headline: 'No timeline entries yet for this region.' },
-    ],
+    events: [{ date: 'TODAY', headline: 'No timeline entries yet for this region.' }],
     etfs: [],
   };
 }
@@ -324,7 +362,17 @@ export async function getRegionDetail(label: string): Promise<RegionDetail> {
  * B2-MD will replace this with a WebSocket or SSE connection.
  */
 export async function* streamAlerts(): AsyncIterable<RiskAlert> {
-  for (const alert of MOCK_ALERTS) {
+  // Pull current alerts from the cached geo state (Gemini-grounded), then
+  // emit them with a small gap so the LiveAlertCard "feels" like a stream.
+  // Falls back to the inline mock array on backend failure.
+  let alerts: RiskAlert[];
+  try {
+    const s = await fetchState();
+    alerts = s.alerts.length > 0 ? s.alerts : MOCK_ALERTS;
+  } catch {
+    alerts = MOCK_ALERTS;
+  }
+  for (const alert of alerts) {
     const gap = 1500 + Math.random() * 1500;
     await new Promise<void>((r) => setTimeout(r, gap));
     yield alert;

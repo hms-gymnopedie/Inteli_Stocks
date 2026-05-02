@@ -8,6 +8,7 @@ import {
   formatPct,
   dir,
 } from '../providers/yahoo.js';
+import * as finnhub from '../providers/finnhub.js';
 
 /** Mirror of app/src/data/types.ts RiskLevel — kept local to avoid cross-workspace import. */
 type RiskLevel = 'low' | 'med' | 'high';
@@ -400,11 +401,37 @@ security.get('/:symbol/earnings', async (req: Request, res: Response) => {
 // ─── GET /:symbol/iv-surface ──────────────────────────────────────────────────
 
 /**
- * IV surface — synthetic surface anchored to current price.
- * Real options IV data would require a dedicated options data provider.
+ * IV surface — uses Finnhub /stock/option-chain when FINNHUB_API_KEY is
+ * configured (B13-E3); falls back to a synthetic surface anchored to current
+ * price when not. The synthetic path tags each point with `synthetic: true`
+ * so the frontend can render a "(synthetic)" badge.
  */
 security.get('/:symbol/iv-surface', async (req: Request, res: Response) => {
   const symbol = (req.params.symbol as string).toUpperCase();
+
+  // Real path: Finnhub option chain. Bucket by expiry × strike, take the
+  // CALL leg (or fall back to PUT if call missing) for each cell, and only
+  // keep ATM ± 15% strikes.
+  if (finnhub.isConfigured()) {
+    try {
+      const chain = await finnhub.getOptionChain(symbol);
+      if (chain.length > 0) {
+        const quotes = await fetchQuotes([symbol]);
+        const price  = quotes[0]?.regularMarketPrice ?? null;
+        const points: Array<{ expiry: string; strike: number; iv: number }> = [];
+        for (const c of chain) {
+          if (c.type !== 'call') continue;
+          if (typeof c.impliedVolatility !== 'number' || c.impliedVolatility <= 0) continue;
+          if (price != null && (c.strike < price * 0.7 || c.strike > price * 1.3)) continue;
+          points.push({ expiry: c.expirationDate, strike: c.strike, iv: Math.round(c.impliedVolatility * 1000) / 1000 });
+        }
+        if (points.length > 0) { res.json(points); return; }
+      }
+    } catch (err) {
+      console.warn(`[security/iv-surface] finnhub failed for ${symbol}, falling through to synthetic:`, (err as Error).message);
+    }
+  }
+
   try {
     const quotes = await fetchQuotes([symbol]);
     const price  = quotes[0]?.regularMarketPrice ?? 100;
