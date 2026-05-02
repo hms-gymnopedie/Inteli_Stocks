@@ -85,6 +85,113 @@ function rangeToStartDate(range: EquityRange): string {
 }
 
 /**
+ * Recompute the portfolio summary from real holdings + equity curve metrics
+ * rather than serving the static seed strings. (B13-D3)
+ *
+ *   nav            — kept from store (user-configured baseline)
+ *   navFormatted   — re-rendered from nav (so nav changes flow through)
+ *   dayChange %    — Σ (weight_i × dayPct_i) over USD holdings
+ *   dayChange $    — nav × dayChange %
+ *   ytd            — total return % from real equity curve over YTD
+ *   oneYear        — same, 1Y range
+ *   sharpe         — annualized sharpe from 1Y curve
+ *   drawdown       — max drawdown % from 1Y curve
+ *   exposure / risk — left as configured in the store (no real source yet;
+ *                     these stay stable across recomputes)
+ */
+async function recomputeSummary(
+  store: PortfolioStore,
+): Promise<typeof store.summary> {
+  const seed = store.summary;
+
+  // ── 1. Day change: weighted sum of holdings dayPct ─────────────────────────
+  let dayPctSum = 0;
+  let weightSum = 0;
+  for (const h of store.holdings) {
+    const w = parseWeight(h.weight);
+    const m = /^\s*([+\-−]?\s*[\d.]+)/.exec(h.dayPct);
+    if (!m) continue;
+    const pct = Number(m[1].replace('−', '-').replace(/\s+/g, ''));
+    if (!Number.isFinite(pct)) continue;
+    dayPctSum += w * pct;
+    weightSum += w;
+  }
+  const dayPct = weightSum > 0 ? dayPctSum / weightSum : 0;
+  const dayDollar = seed.nav * (dayPct / 100);
+
+  // ── 2. YTD / 1Y / sharpe / drawdown from real curves ─────────────────────
+  const [ytdCurve, oneYrCurve] = await Promise.all([
+    realEquityCurve(store, 'YTD').catch(() => [] as BTEquityPoint[]),
+    realEquityCurve(store, '1Y').catch(() => [] as BTEquityPoint[]),
+  ]);
+
+  const ytdPct = curveTotalReturn(ytdCurve);
+  const oneYrPct = curveTotalReturn(oneYrCurve);
+  const sharpeNum = curveSharpe(oneYrCurve);
+  const ddPct = curveMaxDrawdown(oneYrCurve);
+
+  return {
+    ...seed,
+    navFormatted:  fmtNAV(seed.nav),
+    dayChange:     fmtSignedDollar(dayDollar),
+    dayChangePct:  fmtSignedPct(dayPct),
+    ytd:           ytdPct != null ? fmtSignedPct(ytdPct) : seed.ytd,
+    oneYear:       oneYrPct != null ? fmtSignedPct(oneYrPct) : seed.oneYear,
+    sharpe:        sharpeNum != null ? Number(sharpeNum.toFixed(2)) : seed.sharpe,
+    drawdown:      ddPct != null ? fmtSignedPct(ddPct) : seed.drawdown,
+  };
+}
+
+function fmtNAV(n: number): string {
+  return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
+function fmtSignedDollar(n: number): string {
+  const sign = n >= 0 ? '+' : '−';
+  return `${sign}$${Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+}
+
+function fmtSignedPct(pct: number): string {
+  const sign = pct >= 0 ? '+' : '−';
+  return `${sign}${Math.abs(pct).toFixed(2)}%`;
+}
+
+function curveTotalReturn(curve: BTEquityPoint[]): number | null {
+  if (curve.length < 2) return null;
+  const start = curve[0].value;
+  const end   = curve[curve.length - 1].value;
+  if (start <= 0) return null;
+  return (end / start - 1) * 100;
+}
+
+function curveSharpe(curve: BTEquityPoint[]): number | null {
+  if (curve.length < 30) return null;
+  const rets: number[] = [];
+  for (let i = 1; i < curve.length; i++) {
+    const prev = curve[i - 1].value;
+    const cur  = curve[i].value;
+    if (prev > 0) rets.push(cur / prev - 1);
+  }
+  if (rets.length < 20) return null;
+  const mean = rets.reduce((a, b) => a + b, 0) / rets.length;
+  const variance = rets.reduce((a, b) => a + (b - mean) ** 2, 0) / (rets.length - 1);
+  const sd = Math.sqrt(variance);
+  return sd > 0 ? (mean / sd) * Math.sqrt(252) : null;
+}
+
+function curveMaxDrawdown(curve: BTEquityPoint[]): number | null {
+  if (curve.length < 2) return null;
+  let peak = curve[0].value;
+  let maxDD = 0;
+  for (const p of curve) {
+    if (p.value > peak) peak = p.value;
+    const dd = (p.value - peak) / peak;
+    if (dd < maxDD) maxDD = dd;
+  }
+  return maxDD * 100;
+}
+
+/**
  * Build a buy-and-hold equity curve for the user's current USD holdings,
  * scaled to end at their actual NAV. Returns [] when no usable holdings or
  * when the underlying backtest fails — frontend shows "no data" rather than
@@ -127,7 +234,14 @@ async function realEquityCurve(
 portfolio.get('/summary', (req: Request, res: Response): void => {
   const store  = storeFor(req);
   const userId = req.user?.id ?? null;
-  void store.read(userId).then((s) => { res.json(s.summary); });
+  void store.read(userId)
+    .then((s) => recomputeSummary(s))
+    .then((summary) => { res.json(summary); })
+    .catch((err: unknown) => {
+      console.error('[portfolio/summary]', err);
+      // Fall back to whatever is on disk so the panel doesn't go blank.
+      void store.read(userId).then((s) => res.json(s.summary));
+    });
 });
 
 portfolio.get('/equity-curve', (req: Request, res: Response): void => {

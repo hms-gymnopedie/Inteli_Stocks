@@ -43,22 +43,17 @@ export async function getFundamentals(symbol: string): Promise<Fundamental[]> {
 }
 
 /**
- * Returns SEC filings for the given symbol.
- * B2-SEC owns this function body — kept as mock until B2-SEC swaps it.
+ * Returns SEC filings for the given symbol from the EDGAR-backed
+ * /api/security/:symbol/filings endpoint (B2-SEC). For non-US tickers
+ * (e.g. KOSPI) the backend returns []; gracefully treat any error path
+ * as "no filings" so the panel still renders. (B13-D1)
  */
 export async function getFilings(symbol: string): Promise<Filing[]> {
-  // B2-SEC will replace this body. Mock kept intentionally.
-  return new Promise((r) => setTimeout(r, 50 + Math.random() * 100)).then(() => {
-    const MOCK_FILINGS_NVDA: Filing[] = [
-      { date: '26 APR', form: '8-K',  description: 'Material Definitive Agreement · supply contract', impact: 'high' },
-      { date: '18 APR', form: '4',    description: 'Insider sale · CFO · 12,000 shares',               impact: 'med'  },
-      { date: '09 APR', form: '10-Q', description: 'Quarterly Report · Q1 FY25',                       impact: 'high' },
-      { date: '02 APR', form: '8-K',  description: 'Press release · GTC keynote summary',              impact: 'low'  },
-      { date: '28 MAR', form: '13G',  description: 'Vanguard 5.1% holding update',                     impact: 'low'  },
-    ];
-    if (symbol === 'NVDA') return MOCK_FILINGS_NVDA;
-    return [] as Filing[];
-  });
+  try {
+    return await apiFetch<Filing[]>(`/security/${encodeURIComponent(symbol)}/filings`);
+  } catch {
+    return [];
+  }
 }
 
 /**

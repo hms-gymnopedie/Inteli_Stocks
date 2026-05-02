@@ -1,5 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getProfile } from '../../data/security';
+import { getAIHistory, getVerdict } from '../../data/ai';
+import {
+  addTrade,
+  addWatchlist,
+} from '../../data/portfolio';
+import type { AIVerdict, Trade } from '../../data/types';
+import type { HistoryEntry } from '../../data/aiHistoryTypes';
 import { useAsync } from '../../lib/useAsync';
 
 /**
@@ -61,13 +68,90 @@ interface HeaderProps {
  *
  * Data:
  *  - `getProfile(symbol)` for name / sector / indices / price / day change.
- *  - AI verdict + risk tag are still placeholder; B3-DT-AI will wire them to
- *    `ai.getVerdict(symbol)` (lives in `AIInvestmentGuide.tsx` for now).
- *
- * Action chips (+ WATCHLIST / ⤴ TRADE) are UI-only — B5 will hook them up.
+ *  - Verdict tag hydrates from /api/ai/history?area=verdicts (B13-D2),
+ *    matched on the current symbol. Falls back to the synthetic NVDA mock
+ *    if no verdict has been generated yet for this symbol.
+ *  - Action chips (+ WATCHLIST / ⤴ TRADE) hit B8-PF-CRUD endpoints (B13-D4).
  */
 export function Header({ symbol }: HeaderProps) {
   const { data: profile, loading } = useAsync(() => getProfile(symbol), [symbol]);
+
+  // Hydrate the verdict pill from history; falls through to "—" while loading
+  // or when no entry matches this symbol. (B13-D2)
+  const upper = symbol.toUpperCase();
+  const [verdict, setVerdict] = useState<AIVerdict | null>(null);
+  const [verdictLoading, setVerdictLoading] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void getAIHistory('verdicts', 50).then((entries: HistoryEntry[]) => {
+      if (cancelled) return;
+      const mine = [...entries].reverse().find(
+        (e) => (e.symbol ?? '').toUpperCase() === upper,
+      );
+      if (mine && mine.data && typeof mine.data === 'object') {
+        setVerdict(mine.data as AIVerdict);
+      } else {
+        setVerdict(null);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [upper]);
+
+  async function generateNow(): Promise<void> {
+    setVerdictLoading(true);
+    try {
+      const res = await getVerdict(upper);
+      setVerdict(res.data);
+    } catch {
+      // Best effort — popover stays in current state.
+    } finally {
+      setVerdictLoading(false);
+    }
+  }
+
+  // ── Action chip handlers (B13-D4) ──────────────────────────────────────────
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [showTradeForm, setShowTradeForm] = useState(false);
+
+  async function onAddWatchlist(): Promise<void> {
+    if (!profile) return;
+    setActionBusy(true);
+    setActionMsg(null);
+    try {
+      // Map yahoo ticker → KR watchlist code (strip .KS/.KQ); for non-KR
+      // we still add it as the bare code so users get one-click coverage
+      // until per-region watchlists land.
+      const code = profile.symbol.replace(/\.[A-Z]+$/, '');
+      await addWatchlist({
+        code,
+        name:      profile.name,
+        change:    profile.dayChangePct,
+        seed:      Math.floor(Math.random() * 1000),
+        direction: profile.dayChangePct.trim().startsWith('+') ? 1 : -1,
+      });
+      setActionMsg(`Added ${profile.symbol} to watchlist.`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setActionMsg(/code_exists/.test(msg) ? 'Already on watchlist.' : `Failed: ${msg}`);
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  async function onAddTrade(t: Trade): Promise<void> {
+    setActionBusy(true);
+    setActionMsg(null);
+    try {
+      await addTrade(t);
+      setShowTradeForm(false);
+      setActionMsg(`Logged ${t.side} ${t.quantity} ${t.symbol}.`);
+    } catch (e) {
+      setActionMsg(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setActionBusy(false);
+    }
+  }
 
   // Split decimal portion so we can dim it like the prototype: "$924.<19>".
   // Use the formatted string from the data layer (it already carries currency
@@ -135,18 +219,39 @@ export function Header({ symbol }: HeaderProps) {
         <div>
           <div className="wf-mini">AI VERDICT</div>
           <div className="row gap-2 center" style={{ marginTop: 4 }}>
-            <span
-              className="tag"
-              style={{
-                color: 'var(--orange)',
-                borderColor: 'var(--orange)',
-                fontSize: 10,
-                padding: '4px 10px',
-              }}
-            >
-              ● ACCUMULATE
-            </span>
-            <span className="wf-mono muted">RISK 3 / 5</span>
+            {verdict ? (
+              <>
+                <span
+                  className="tag"
+                  style={{
+                    color: verdictColor(verdict.verdict),
+                    borderColor: verdictColor(verdict.verdict),
+                    fontSize: 10,
+                    padding: '4px 10px',
+                  }}
+                  title={verdict.summary}
+                >
+                  ● {verdict.verdict}
+                </span>
+                <span className="wf-mono muted">RISK {verdict.riskScore} / 5</span>
+              </>
+            ) : (
+              <>
+                <span className="tag muted" style={{ fontSize: 10, padding: '4px 10px' }}>
+                  no verdict
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void generateNow()}
+                  disabled={verdictLoading}
+                  className="tag"
+                  style={{ background: 'transparent', cursor: 'pointer', fontFamily: 'inherit', fontSize: 10 }}
+                  title={`Generate AI verdict for ${upper}`}
+                >
+                  {verdictLoading ? 'generating…' : '↻ generate'}
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="row gap-2">
@@ -158,6 +263,8 @@ export function Header({ symbol }: HeaderProps) {
               cursor: 'pointer',
               fontFamily: 'inherit',
             }}
+            disabled={actionBusy || !profile}
+            onClick={() => void onAddWatchlist()}
           >
             + WATCHLIST
           </button>
@@ -169,11 +276,118 @@ export function Header({ symbol }: HeaderProps) {
               cursor: 'pointer',
               fontFamily: 'inherit',
             }}
+            disabled={!profile}
+            onClick={() => setShowTradeForm((v) => !v)}
           >
             ⤴ TRADE
           </button>
         </div>
       </div>
+      {actionMsg && (
+        <div className="wf-mini muted" style={{ gridColumn: '1 / -1' }}>
+          {actionMsg}
+        </div>
+      )}
+      {showTradeForm && profile && (
+        <div style={{ gridColumn: '1 / -1' }}>
+          <TradeChip
+            symbol={profile.symbol}
+            currency={profile.currency || 'USD'}
+            price={profile.price}
+            busy={actionBusy}
+            onSubmit={onAddTrade}
+            onCancel={() => setShowTradeForm(false)}
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+// ─── Verdict color mapping ──────────────────────────────────────────────────
+
+function verdictColor(v: string): string {
+  switch (v) {
+    case 'ACCUMULATE': return 'var(--up)';
+    case 'HOLD':       return 'var(--orange)';
+    case 'REDUCE':     return 'var(--down)';
+    case 'AVOID':      return 'var(--down)';
+    default:           return 'var(--orange)';
+  }
+}
+
+// ─── Inline trade form ─────────────────────────────────────────────────────
+
+interface TradeChipProps {
+  symbol: string;
+  currency: string;
+  price: number;
+  busy: boolean;
+  onSubmit: (t: Trade) => Promise<void> | void;
+  onCancel: () => void;
+}
+
+function TradeChip({ symbol, currency, price, busy, onSubmit, onCancel }: TradeChipProps) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
+  const [qty, setQty] = useState('1');
+  const [px, setPx]   = useState(String(price || 0));
+
+  const cell: React.CSSProperties = {
+    background: 'var(--panel-2)',
+    border: '1px solid var(--hairline)',
+    borderRadius: 4,
+    padding: '4px 8px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    color: 'var(--fg)',
+    outline: 'none',
+    minWidth: 0,
+  };
+
+  const submit = (e: React.FormEvent): void => {
+    e.preventDefault();
+    void onSubmit({
+      date,
+      symbol,
+      side,
+      quantity: Number(qty) || 0,
+      price:    Number(px) || 0,
+      currency,
+    });
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '110px 70px 70px 90px 60px auto',
+        gap: 6,
+        marginTop: 8,
+        padding: '8px 10px',
+        background: 'var(--panel-2)',
+        borderRadius: 4,
+        alignItems: 'center',
+      }}
+    >
+      <input style={cell} type="date"   value={date}  onChange={(e) => setDate(e.target.value)} required />
+      <select style={cell}              value={side}  onChange={(e) => setSide(e.target.value as 'BUY' | 'SELL')}>
+        <option value="BUY">BUY</option>
+        <option value="SELL">SELL</option>
+      </select>
+      <input style={cell} type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="qty" required />
+      <input style={cell} type="number" min="0" step="any" value={px}  onChange={(e) => setPx(e.target.value)}  placeholder="price" required />
+      <span className="wf-mini muted">{currency}</span>
+      <div className="row gap-1">
+        <button type="submit" className="tag" style={{ background: 'var(--orange)', color: '#000', border: 0, cursor: 'pointer' }} disabled={busy}>
+          OK
+        </button>
+        <button type="button" className="tag" style={{ background: 'transparent', cursor: 'pointer' }} onClick={onCancel}>
+          ×
+        </button>
+      </div>
+    </form>
   );
 }
