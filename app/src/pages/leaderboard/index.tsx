@@ -9,7 +9,7 @@
  *   4. Combined chart: top-3 strategies + SPY benchmark overlay
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   deleteStrategy as apiDeleteStrategy,
   listStrategies,
@@ -200,9 +200,8 @@ export function Leaderboard() {
                 const isExpanded = expandedId === s.id;
                 const delta = deltaVsBenchmark(s);
                 return (
-                  <>
+                  <Fragment key={s.id}>
                     <tr
-                      key={s.id}
                       className={'lb-row' + (isExpanded ? ' lb-row-expanded' : '')}
                       onClick={() => setExpandedId((cur) => (cur === s.id ? null : s.id))}
                       tabIndex={0}
@@ -249,7 +248,7 @@ export function Leaderboard() {
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr className="lb-row-detail" key={`${s.id}-detail`}>
+                      <tr className="lb-row-detail">
                         <td colSpan={9}>
                           <div className="lb-detail-inner">
                             <div className="lb-detail-meta">
@@ -288,7 +287,7 @@ export function Leaderboard() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
