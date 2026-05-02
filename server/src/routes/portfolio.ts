@@ -27,6 +27,7 @@ import type {
 } from '../storage/types.js';
 import { runBacktest, type EquityPoint as BTEquityPoint } from '../lib/backtest.js';
 import { volatilityScore } from '../lib/risk.js';
+import { computeRiskFactors } from '../lib/factors.js';
 
 export const portfolio = Router();
 
@@ -305,7 +306,22 @@ portfolio.get('/trades', (req: Request, res: Response): void => {
 portfolio.get('/risk-factors', (req: Request, res: Response): void => {
   const store  = storeFor(req);
   const userId = req.user?.id ?? null;
-  void store.read(userId).then((s) => { res.json(s.riskFactors); });
+  void store.read(userId)
+    .then(async (s) => {
+      // Compute live; fall back to stored seed values on any failure so the
+      // panel never goes blank.
+      try {
+        const factors = await computeRiskFactors(s.holdings);
+        res.json(factors.length > 0 ? factors : s.riskFactors);
+      } catch (err) {
+        console.error('[portfolio/risk-factors] compute failed:', (err as Error).message);
+        res.json(s.riskFactors);
+      }
+    })
+    .catch((err: unknown) => {
+      console.error('[portfolio/risk-factors]', err);
+      res.json([]);
+    });
 });
 
 // ─── Mutation endpoints — B8-PF-CRUD ─────────────────────────────────────────
