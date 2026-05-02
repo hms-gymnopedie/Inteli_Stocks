@@ -8,6 +8,12 @@ import {
   providerConfigured,
   resolveModel,
 } from '../providers/registry.js';
+import {
+  appendAIVerdict,
+  appendAIHedge,
+  appendAISignals,
+  appendAIInsights,
+} from '../storage/google-sheets.js';
 
 /**
  * /api/ai/* — multi-provider proxy (B2-AI + B2-AI2)
@@ -167,10 +173,14 @@ ai.post('/verdict', async (req: Request, res: Response) => {
       system: VERDICT_SYSTEM,
       user:   `Analyze ${sym} and return the investment verdict JSON.`,
     });
-    res.json({
-      data: parseJSON(result.text),
-      meta: { provider: result.provider, model: result.model, usage: result.usage },
-    });
+    const data = parseJSON<{
+      symbol: string; verdict: string;
+      riskScore: number; convictionScore: number;
+      summary: string; axes: unknown[];
+    }>(result.text);
+    const meta = { provider: result.provider, model: result.model, usage: result.usage };
+    res.json({ data, meta });
+    void appendAIVerdict(data, meta);
   } catch (err) {
     console.error('[B2-AI] /verdict error:', err);
     res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
@@ -192,16 +202,20 @@ ai.post('/hedge', async (req: Request, res: Response) => {
   const model = resolveModel(provider, body.model);
 
   try {
+    const exposure = body.exposure.trim();
     const result = await generate({
       provider,
       model,
       system: HEDGE_SYSTEM,
-      user:   `Portfolio exposure: ${body.exposure.trim()}\n\nReturn the hedge proposal JSON.`,
+      user:   `Portfolio exposure: ${exposure}\n\nReturn the hedge proposal JSON.`,
     });
-    res.json({
-      data: parseJSON(result.text),
-      meta: { provider: result.provider, model: result.model, usage: result.usage },
-    });
+    const data = parseJSON<{
+      proposalId: string; description: string;
+      expectedDrawdownTrim: string; actions: string[];
+    }>(result.text);
+    const meta = { provider: result.provider, model: result.model, usage: result.usage };
+    res.json({ data, meta });
+    void appendAIHedge(exposure, data, meta);
   } catch (err) {
     console.error('[B2-AI] /hedge error:', err);
     res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
@@ -229,12 +243,15 @@ ai.get('/signals', async (req: Request, res: Response) => {
     if (!Array.isArray(items)) throw new Error('signals: not an array');
     for (const item of items) sseEvent(res, 'signal', item);
     // Emit a meta event with token usage so the client can show "Used N in / M out".
-    sseEvent(res, 'meta', {
-      provider: result.provider,
-      model:    result.model,
-      usage:    result.usage,
-    });
+    const meta = { provider: result.provider, model: result.model, usage: result.usage };
+    sseEvent(res, 'meta', meta);
     sseDone(res);
+    // Mirror to Sheets after the response is closed (fire-and-forget).
+    void appendAISignals(
+      items as { id: string; type: 'SIGNAL' | 'CAUTION' | 'INFO';
+                 when: string; body: string; tags: string[] }[],
+      meta,
+    );
   } catch (err) {
     console.error('[B2-AI] /signals error:', err);
     sseEvent(res, 'error', { message: String(err) });
@@ -263,12 +280,15 @@ ai.get('/insights', async (req: Request, res: Response) => {
     const items = parseJSON<unknown[]>(result.text);
     if (!Array.isArray(items)) throw new Error('insights: not an array');
     for (const item of items) sseEvent(res, 'insight', item);
-    sseEvent(res, 'meta', {
-      provider: result.provider,
-      model:    result.model,
-      usage:    result.usage,
-    });
+    const meta = { provider: result.provider, model: result.model, usage: result.usage };
+    sseEvent(res, 'meta', meta);
     sseDone(res);
+    void appendAIInsights(
+      items as { id: string; tag: string; when: string; tone: string;
+                 title: string; body: string; actions: string[];
+                 risk: string; score: number }[],
+      meta,
+    );
   } catch (err) {
     console.error('[B2-AI] /insights error:', err);
     sseEvent(res, 'error', { message: String(err) });

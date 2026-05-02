@@ -13,6 +13,7 @@ import os from 'node:os';
 import * as anthropic from '../providers/anthropic.js';
 import * as gemini    from '../providers/gemini.js';
 import * as fred      from '../providers/fred.js';
+import * as googleAuth from '../providers/google.js';
 
 export const settings = Router();
 
@@ -21,7 +22,13 @@ export const settings = Router();
 // server/ runs from <repo>/server with cwd == server. .env lives at repo root.
 const ENV_PATH = path.resolve(process.cwd(), '..', '.env');
 
-const MANAGED_KEYS = ['ANTHROPIC_API_KEY', 'GEMINI_API_KEY', 'FRED_API_KEY'] as const;
+const MANAGED_KEYS = [
+  'ANTHROPIC_API_KEY',
+  'GEMINI_API_KEY',
+  'FRED_API_KEY',
+  'GOOGLE_CLIENT_ID',
+  'GOOGLE_CLIENT_SECRET',
+] as const;
 type ManagedKey = (typeof MANAGED_KEYS)[number];
 
 function readEnvFile(): string {
@@ -73,9 +80,11 @@ function writeEnvAtomic(content: string): void {
 settings.get('/keys/status', (_req, res) => {
   res.json({
     keys: {
-      ANTHROPIC_API_KEY: anthropic.isConfigured(),
-      GEMINI_API_KEY:    gemini.isConfigured(),
-      FRED_API_KEY:      fred.isConfigured(),
+      ANTHROPIC_API_KEY:    anthropic.isConfigured(),
+      GEMINI_API_KEY:       gemini.isConfigured(),
+      FRED_API_KEY:         fred.isConfigured(),
+      GOOGLE_CLIENT_ID:     Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
+      GOOGLE_CLIENT_SECRET: Boolean(process.env.GOOGLE_CLIENT_SECRET?.trim()),
     },
     envPath: ENV_PATH,
   });
@@ -124,13 +133,16 @@ settings.put('/keys', (req: Request, res: Response) => {
     anthropic.reset();
     gemini.reset();
     fred.reset();
+    googleAuth.reset();
 
     return res.json({
       ok: true,
       keys: {
-        ANTHROPIC_API_KEY: anthropic.isConfigured(),
-        GEMINI_API_KEY:    gemini.isConfigured(),
-        FRED_API_KEY:      fred.isConfigured(),
+        ANTHROPIC_API_KEY:    anthropic.isConfigured(),
+        GEMINI_API_KEY:       gemini.isConfigured(),
+        FRED_API_KEY:         fred.isConfigured(),
+        GOOGLE_CLIENT_ID:     Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
+        GOOGLE_CLIENT_SECRET: Boolean(process.env.GOOGLE_CLIENT_SECRET?.trim()),
       },
     });
   } catch (err) {

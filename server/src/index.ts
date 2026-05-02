@@ -8,6 +8,7 @@ import { macro } from './routes/macro.js';
 import { ai } from './routes/ai.js';
 import { settings } from './routes/settings.js';
 import { auth } from './routes/auth.js';
+import { googleRouter } from './routes/google.js';
 import { requireAuth } from './auth.js';
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/portfolio', requireAuth, portfolio); // B2-MD + B5-CR
 app.use('/api/macro',     macro);     // B2-FRED
 app.use('/api/ai',        ai);        // B2-AI
 app.use('/api/settings',  settings);  // Settings page backend
+app.use('/api/google',    googleRouter); // B5-GS — OAuth + Sheets sync
 
 // --- Start ---
 const port = Number(process.env.PORT ?? 3001);

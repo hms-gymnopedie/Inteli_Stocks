@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-05-01 (CI 첫 그린 + B5-AU/CR + B2-MAP-2 — Supabase 인증, WorldMap 줌·팬·핀 클릭, CI workflow 그린)
+**Last updated:** 2026-05-01 (B5-GS — Google Sheets 미러 + OAuth2 installed-app flow)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -195,6 +195,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 |---|---|---|---|---|---|
 | B5-AU | 인증 (Supabase 또는 Clerk) | `app/src/auth/*` | backend-api-data-engineer | ✅ | AuthProvider+useAuth (auth.tsx), Login.tsx (/login·/signup), requireAuth middleware, /api/auth/me+config, TopBar AuthChip, fetchStatus JWT injection, Settings SupabaseSection. Graceful degrade: local mode = no login screen, no chip, no-op provider. |
 | B5-CR | 포트폴리오 CRUD + 동기화 | `server/routes/portfolio/*` | backend-api-data-engineer | ✅ | storage/types.ts interface + seed.ts + local.ts (JSON file) + supabase.ts (upsert). routes/portfolio.ts storeFor(req) dual-mode selector. SQL migration 001_portfolios.sql + README. 34 E2E + 62 unit tests all green. |
+| B5-GS | Google Sheets 미러 (로컬 모드 전용) | `server/src/providers/google.ts`, `server/src/storage/{config,google-sheets}.ts`, `server/src/routes/google.ts`, `server/src/routes/settings.ts`, `app/src/pages/settings/index.tsx` | main | ✅ | OAuth2 installed-app flow (`googleapis` + `google-auth-library`). 토큰 `~/.intelistock/google-token.json`, 스프레드시트 메타 `~/.intelistock/storage.json`. 12 시트 append-only 누적 (8 portfolio + AI_Signals/AI_Insights/AI_Verdicts/AI_Hedges). 모든 row 첫 컬럼 `synced_at` ISO8601 UTC. portfolio: localStore.write 후 fire-and-forget. AI: /verdict·/hedge·/signals·/insights 응답 직후 fire-and-forget append. appendTab 패턴: A1 비었으면 header+data, 있으면 data만. Settings에 Connect/Disconnect, Use existing/Create new/Sync now, last-sync timestamp + setup guide. GOOGLE_CLIENT_ID/SECRET를 MANAGED_KEYS에 추가해 .env 자동 갱신. 미설정/미연결/스프레드시트 미선택 시 503/401/400 가드. |
 | B5-NT | 알림/푸시 (이메일/웹훅) | `server/jobs/*` | backend-api-data-engineer | ⬜ | |
 
 ### 배치 R — 리뷰 (각 페이즈 종료 시)
@@ -254,6 +255,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 - ✅ **B6 (5/5)** — 신규 섹션 모두 와이어링: Portfolio TradesLog (기간/심볼 필터) + RiskDecomposition (스택 바 + 클릭 highlight); Geo RegionDrawer (핀 클릭 → 슬라이드 패널, 이벤트 타임라인 + 관련 ETF, `getRegionDetail` mock); Detail EarningsGuidance + OptionsChainMini (IV heatmap).
 - 실행: `npm run dev` (root) → Vite :5180 + Express :3001. ⌘K 검색·`/detail/<TICKER>` 직접 URL·Tweaks Provider 셀렉트 모두 동작.
 - ✅ **B5-AU + B5-CR** — Supabase auth + portfolio sync (graceful degrade: local mode preserved). 13 commits. 34 E2E + 62 unit all green.
+- ✅ **B5-GS** — Google Sheets append-only 미러 (로컬 JSON이 source-of-truth). OAuth2 installed-app flow + 12-tab 누적 (8 portfolio + 4 AI). 모든 row에 `synced_at` (ISO8601 UTC) 첫 컬럼. AI 생성 결과(verdict/hedge/signals/insights)도 매 호출마다 자동 append (token usage 포함). Settings UI: Connect Google → Create/Link spreadsheet → Sync now. 매 `localStore.write()` 후 자동 미러 (실패 시 lastSyncError 기록만 하고 로컬 저장은 성공). 가드: GOOGLE_CLIENT_ID/SECRET 미설정 → 503, 토큰 없음 → 401, 시트 미선택 → 400.
 
 - ✅ **Phase 1 완료 (7/7)** — 두 라운드에 걸쳐 모두 완료:
   - B1-OV ✅ 9/9 · B1-PF ✅ 4/4 · B1-DT ✅ 7/7 · B1-GE ✅ 5/5

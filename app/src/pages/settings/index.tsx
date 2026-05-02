@@ -22,9 +22,11 @@ import { useAuth } from '../../lib/auth';
 // ─── Section 1: API keys ─────────────────────────────────────────────────────
 
 const KEY_DEFS: { id: string; label: string; help?: string }[] = [
-  { id: 'ANTHROPIC_API_KEY', label: 'Anthropic',     help: 'sk-ant-…' },
-  { id: 'GEMINI_API_KEY',    label: 'Google Gemini', help: 'aistudio.google.com/app/apikey' },
-  { id: 'FRED_API_KEY',      label: 'FRED (CPI)',    help: 'fred.stlouisfed.org/docs/api/api_key.html' },
+  { id: 'ANTHROPIC_API_KEY',    label: 'Anthropic',           help: 'sk-ant-…' },
+  { id: 'GEMINI_API_KEY',       label: 'Google Gemini',       help: 'aistudio.google.com/app/apikey' },
+  { id: 'FRED_API_KEY',         label: 'FRED (CPI)',          help: 'fred.stlouisfed.org/docs/api/api_key.html' },
+  { id: 'GOOGLE_CLIENT_ID',     label: 'Google OAuth Client', help: 'console.cloud.google.com/apis/credentials → "OAuth 2.0 Client ID" (Web application)' },
+  { id: 'GOOGLE_CLIENT_SECRET', label: 'Google OAuth Secret', help: 'pairs with the Client ID above' },
 ];
 
 interface KeyStatus {
@@ -489,6 +491,325 @@ function OtherTweaksSection() {
   );
 }
 
+// ─── Section: Google Drive Sync ─────────────────────────────────────────────
+
+interface GoogleStatus {
+  configured:     boolean;
+  connected:      boolean;
+  spreadsheetId:  string | null;
+  spreadsheetUrl: string | null;
+  lastSyncAt:     number | null;
+  lastSyncError:  string | null;
+}
+
+function formatLastSync(ts: number | null): string {
+  if (ts == null) return 'never';
+  const d = new Date(ts);
+  return d.toLocaleString();
+}
+
+function GoogleSyncSection() {
+  const [status, setStatus] = useState<GoogleStatus | null>(null);
+  const [busy, setBusy]     = useState<string | null>(null);
+  const [message, setMsg]   = useState<string | null>(null);
+  const [draft, setDraft]   = useState('');
+  const [showGuide, setShowGuide] = useState(false);
+
+  async function refresh(): Promise<void> {
+    try {
+      const r = await fetch('/api/google/status');
+      const j = (await r.json()) as GoogleStatus;
+      setStatus(j);
+    } catch (e) {
+      setMsg(`Status fetch failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  useEffect(() => { void refresh(); }, []);
+
+  // After OAuth callback redirects back here, surface a friendly note + reload status.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('google') === 'connected') {
+      setMsg('Connected to Google.');
+      url.searchParams.delete('google');
+      window.history.replaceState(null, '', url.toString());
+      void refresh();
+    }
+  }, []);
+
+  async function connect(): Promise<void> {
+    setBusy('connect');
+    setMsg(null);
+    try {
+      const r = await fetch('/api/google/auth-url');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = (await r.json()) as { ok: boolean; url?: string; reason?: string };
+      if (!j.ok || !j.url) throw new Error(j.reason ?? 'no_auth_url');
+      window.location.href = j.url;
+    } catch (e) {
+      setMsg(`Connect failed: ${e instanceof Error ? e.message : String(e)}`);
+      setBusy(null);
+    }
+  }
+
+  async function disconnect(): Promise<void> {
+    setBusy('disconnect');
+    setMsg(null);
+    try {
+      const r = await fetch('/api/google/disconnect', { method: 'POST' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await refresh();
+      setMsg('Disconnected.');
+    } catch (e) {
+      setMsg(`Disconnect failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function useSpreadsheet(): Promise<void> {
+    if (!draft.trim()) {
+      setMsg('Paste a spreadsheet URL or ID first.');
+      return;
+    }
+    setBusy('use');
+    setMsg(null);
+    try {
+      const r = await fetch('/api/google/spreadsheet/use', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ spreadsheet: draft.trim() }),
+      });
+      const j = (await r.json()) as { ok: boolean; reason?: string; title?: string; detail?: string };
+      if (!j.ok) throw new Error(j.detail ?? j.reason ?? 'unknown');
+      setDraft('');
+      await refresh();
+      setMsg(`Linked: ${j.title ?? '(untitled)'}`);
+    } catch (e) {
+      setMsg(`Link failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function createNew(): Promise<void> {
+    setBusy('create');
+    setMsg(null);
+    try {
+      const r = await fetch('/api/google/spreadsheet/create', { method: 'POST' });
+      const j = (await r.json()) as { ok: boolean; title?: string; reason?: string; detail?: string };
+      if (!j.ok) throw new Error(j.detail ?? j.reason ?? 'unknown');
+      await refresh();
+      setMsg(`Created: ${j.title ?? '(untitled)'}`);
+    } catch (e) {
+      setMsg(`Create failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function clearSheet(): Promise<void> {
+    setBusy('clear-sheet');
+    setMsg(null);
+    try {
+      const r = await fetch('/api/google/spreadsheet/clear', { method: 'POST' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      await refresh();
+      setMsg('Spreadsheet unlinked. Connection kept.');
+    } catch (e) {
+      setMsg(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function syncNow(): Promise<void> {
+    setBusy('sync');
+    setMsg(null);
+    try {
+      const r = await fetch('/api/google/sync-now', { method: 'POST' });
+      const j = (await r.json()) as { ok: boolean; reason?: string; detail?: string };
+      if (!j.ok) throw new Error(j.detail ?? j.reason ?? 'unknown');
+      await refresh();
+      setMsg('Sync complete.');
+    } catch (e) {
+      setMsg(`Sync failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="settings-section settings-section--wide">
+      <h2 className="settings-section-h">Google Drive Sync</h2>
+      <p className="settings-section-desc">
+        Mirror your portfolio to a Google Sheets file every time it changes.
+        Local <code>~/.intelistock/portfolio.json</code> stays the source of
+        truth — Sheets is a one-way mirror, so editing in Drive won't
+        round-trip back. OAuth tokens persist in
+        <code> ~/.intelistock/google-token.json</code>.
+      </p>
+
+      {!status ? (
+        <div className="settings-foot">Loading…</div>
+      ) : (
+        <>
+          <div className="settings-tw-row">
+            <span className="settings-tw-label">OAuth client</span>
+            <span className={`settings-key-badge ${status.configured ? 'on' : 'off'}`}>
+              {status.configured ? '● configured' : '○ set GOOGLE_CLIENT_ID / SECRET above'}
+            </span>
+          </div>
+          <div className="settings-tw-row">
+            <span className="settings-tw-label">Connection</span>
+            {status.connected ? (
+              <>
+                <span className="settings-key-badge on">● connected</span>
+                <button
+                  type="button"
+                  className="settings-btn-danger"
+                  onClick={() => void disconnect()}
+                  disabled={busy != null}
+                >
+                  {busy === 'disconnect' ? 'Disconnecting…' : 'Disconnect'}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="settings-key-badge off">○ not connected</span>
+                <button
+                  type="button"
+                  className="settings-btn-primary"
+                  onClick={() => void connect()}
+                  disabled={!status.configured || busy != null}
+                  title={status.configured ? 'Open Google consent screen' : 'OAuth client not configured'}
+                >
+                  {busy === 'connect' ? 'Redirecting…' : 'Connect Google'}
+                </button>
+              </>
+            )}
+          </div>
+
+          {status.connected && (
+            <>
+              <div className="settings-tw-row">
+                <span className="settings-tw-label">Spreadsheet</span>
+                {status.spreadsheetId ? (
+                  <>
+                    <a
+                      href={status.spreadsheetUrl ?? '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="settings-btn-link"
+                      title={status.spreadsheetId}
+                    >
+                      Open in Drive ↗
+                    </a>
+                    <button
+                      type="button"
+                      className="settings-btn-link"
+                      onClick={() => void clearSheet()}
+                      disabled={busy != null}
+                    >
+                      Unlink
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-btn-primary"
+                      onClick={() => void syncNow()}
+                      disabled={busy != null}
+                    >
+                      {busy === 'sync' ? 'Syncing…' : 'Sync now'}
+                    </button>
+                  </>
+                ) : (
+                  <span className="settings-key-badge off">○ none selected</span>
+                )}
+              </div>
+
+              {!status.spreadsheetId && (
+                <>
+                  <div className="settings-tw-row">
+                    <span className="settings-tw-label">Use existing</span>
+                    <input
+                      type="text"
+                      placeholder="paste spreadsheet URL or ID…"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      style={{ flex: 1, minWidth: 240 }}
+                    />
+                    <button
+                      type="button"
+                      className="settings-btn-primary"
+                      onClick={() => void useSpreadsheet()}
+                      disabled={busy != null || !draft.trim()}
+                    >
+                      {busy === 'use' ? 'Linking…' : 'Link'}
+                    </button>
+                  </div>
+                  <div className="settings-tw-row">
+                    <span className="settings-tw-label">Or create new</span>
+                    <button
+                      type="button"
+                      className="settings-btn-primary"
+                      onClick={() => void createNew()}
+                      disabled={busy != null}
+                    >
+                      {busy === 'create' ? 'Creating…' : 'Create new spreadsheet'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              <div className="settings-foot">
+                Last sync: <code>{formatLastSync(status.lastSyncAt)}</code>
+                {status.lastSyncError && (
+                  <>
+                    {' · '}
+                    <span className="settings-msg" style={{ color: 'var(--down)' }}>
+                      last error: {status.lastSyncError}
+                    </span>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+
+          <div className="settings-actions">
+            {message && <span className="settings-msg">{message}</span>}
+          </div>
+
+          <button
+            type="button"
+            className="settings-btn-link"
+            onClick={() => setShowGuide((v) => !v)}
+            style={{ marginTop: 8 }}
+          >
+            {showGuide ? '▾ Hide setup guide' : '▸ Show setup guide'}
+          </button>
+          {showGuide && (
+            <div className="settings-section-desc" style={{ marginTop: 8 }}>
+              <ol style={{ paddingLeft: 18, lineHeight: 1.7 }}>
+                <li>Go to <code>console.cloud.google.com/apis/credentials</code> and create a project (or reuse one).</li>
+                <li>Enable <strong>Google Sheets API</strong> in the API library.</li>
+                <li>Configure the OAuth consent screen (External, "Testing" mode is fine — add yourself as a test user).</li>
+                <li>Create an <strong>OAuth 2.0 Client ID</strong> of type <strong>Web application</strong>.</li>
+                <li>
+                  Add this exact URL to <em>Authorized redirect URIs</em>:{' '}
+                  <code>http://localhost:3001/api/google/callback</code>
+                </li>
+                <li>Copy the Client ID and Client Secret into the <strong>API Keys</strong> section above and Save.</li>
+                <li>Click <strong>Connect Google</strong>, grant access, then create or link a spreadsheet.</li>
+              </ol>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 // ─── Section 5: Supabase ─────────────────────────────────────────────────────
 
 /**
@@ -602,6 +923,7 @@ export function Settings() {
         <DataExportSection />
         <RefreshSection />
         <AIModelsSection />
+        <GoogleSyncSection />
         <OtherTweaksSection />
         <SupabaseSection />
       </div>

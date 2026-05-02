@@ -11,6 +11,7 @@ import path from 'node:path';
 import os from 'node:os';
 import type { PortfolioStorage, PortfolioStore } from './types.js';
 import { buildSeedData } from './seed.js';
+import { mirrorToSheets } from './google-sheets.js';
 
 const DATA_DIR  = path.join(os.homedir(), '.intelistock');
 const DATA_FILE = path.join(DATA_DIR, 'portfolio.json');
@@ -37,5 +38,12 @@ export const localStore: PortfolioStorage = {
     } catch (err) {
       console.error('[localStore] write failed:', err);
     }
+
+    // Fire-and-forget Google Sheets mirror. Skipped silently when Google is
+    // not configured / not connected / no spreadsheet selected. Errors are
+    // logged inside mirrorToSheets and recorded in storage.json.lastSyncError.
+    void mirrorToSheets(data).catch((err) => {
+      console.error('[localStore] mirror error (unhandled):', err);
+    });
   },
 };
