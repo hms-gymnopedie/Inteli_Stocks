@@ -14,6 +14,15 @@ import {
   appendAISignals,
   appendAIInsights,
 } from '../storage/google-sheets.js';
+import {
+  type Area,
+  appendHedge   as historyAppendHedge,
+  appendInsights as historyAppendInsights,
+  appendSignals  as historyAppendSignals,
+  appendVerdict  as historyAppendVerdict,
+  clearArea     as historyClearArea,
+  readHistory   as historyRead,
+} from '../storage/ai-history.js';
 
 /**
  * /api/ai/* — multi-provider proxy (B2-AI + B2-AI2)
@@ -181,6 +190,7 @@ ai.post('/verdict', async (req: Request, res: Response) => {
     const meta = { provider: result.provider, model: result.model, usage: result.usage };
     res.json({ data, meta });
     void appendAIVerdict(data, meta);
+    historyAppendVerdict(data, meta);
   } catch (err) {
     console.error('[B2-AI] /verdict error:', err);
     res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
@@ -216,6 +226,7 @@ ai.post('/hedge', async (req: Request, res: Response) => {
     const meta = { provider: result.provider, model: result.model, usage: result.usage };
     res.json({ data, meta });
     void appendAIHedge(exposure, data, meta);
+    historyAppendHedge(data, exposure, meta);
   } catch (err) {
     console.error('[B2-AI] /hedge error:', err);
     res.status(502).json({ ok: false, reason: 'upstream_error', detail: String(err) });
@@ -252,6 +263,7 @@ ai.get('/signals', async (req: Request, res: Response) => {
                  when: string; body: string; tags: string[] }[],
       meta,
     );
+    historyAppendSignals(items, meta);
   } catch (err) {
     console.error('[B2-AI] /signals error:', err);
     sseEvent(res, 'error', { message: String(err) });
@@ -289,11 +301,67 @@ ai.get('/insights', async (req: Request, res: Response) => {
                  risk: string; score: number }[],
       meta,
     );
+    historyAppendInsights(items, meta);
   } catch (err) {
     console.error('[B2-AI] /insights error:', err);
     sseEvent(res, 'error', { message: String(err) });
     res.end();
   }
+});
+
+// ─── GET /history ────────────────────────────────────────────────────────────
+
+const VALID_AREAS: ReadonlyArray<Area> = ['signals', 'insights', 'verdicts', 'hedges'];
+
+function parseArea(raw: unknown): Area | null {
+  if (typeof raw !== 'string') return null;
+  return (VALID_AREAS as readonly string[]).includes(raw) ? (raw as Area) : null;
+}
+
+function parseLimit(raw: unknown): number | undefined {
+  if (typeof raw !== 'string' || raw === '') return undefined;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined;
+}
+
+ai.get('/history', (req: Request, res: Response) => {
+  const limit = parseLimit(req.query.limit);
+  const rawArea = req.query.area;
+
+  if (typeof rawArea === 'string' && rawArea.length > 0) {
+    const area = parseArea(rawArea);
+    if (!area) {
+      res.status(400).json({ ok: false, reason: 'invalid_area' });
+      return;
+    }
+    res.json({ area, entries: historyRead(area, limit) });
+    return;
+  }
+
+  // No area filter — return the full file (optionally limited per-area).
+  const full = historyRead();
+  if (typeof limit === 'number') {
+    res.json({
+      signals:  full.signals.slice(-limit),
+      insights: full.insights.slice(-limit),
+      verdicts: full.verdicts.slice(-limit),
+      hedges:   full.hedges.slice(-limit),
+    });
+    return;
+  }
+  res.json(full);
+});
+
+// ─── DELETE /history/:area ───────────────────────────────────────────────────
+
+ai.delete('/history/:area', (req: Request, res: Response) => {
+  const area = parseArea(req.params.area);
+  if (!area) {
+    res.status(400).json({ ok: false, reason: 'invalid_area' });
+    return;
+  }
+  historyClearArea(area);
+  res.status(204).end();
 });
 
 // Avoid unused-symbol lint; keep export for callers that may want defaults.
