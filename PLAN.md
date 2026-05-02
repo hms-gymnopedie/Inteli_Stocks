@@ -2,7 +2,7 @@
 
 > **Living document.** Claude는 작업을 시작하거나 마칠 때마다 이 파일을 먼저 읽고, 해당 작업의 체크박스/상태를 갱신해야 함. 새로운 결정이 생기면 본문도 함께 수정.
 
-**Last updated:** 2026-05-01 (B5-GS — Google Sheets 미러 + OAuth2 installed-app flow)
+**Last updated:** 2026-05-01 (B8 — Portfolio CRUD + Overview UX 4건 + AI Assistant 탭 + 백테스트 leaderboard 동시 머지)
 **Repo:** https://github.com/hms-gymnopedie/Inteli_Stocks
 **Local root:** `/Users/gymnopedie/260428_InteliStock`
 **App root:** `app/` (Vite + React 18 + TypeScript)
@@ -189,6 +189,21 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 | B6-GE | Geo §2.3 신규: RegionDrawer + getRegionDetail + WorldMap pin clicks | `app/src/pages/geo/RegionDrawer.tsx`, `WorldMap.tsx`, `index.tsx`, `app/src/data/{geo,types}.ts`, `styles.css` | frontend-ui-integrator | ✅ | `4ba4b2e` (component+data) + `2942c45` (CSS). WorldMap wrapper layers transparent click buttons at projected pin coords (primitive doesn't expose onClick). RegionDetail mock keyed by ISO-2 (UA/IL/IR/TW/KR/US/NG). 360px right-edge slide-in (300ms), Esc + backdrop close, `prefers-reduced-motion` respected, mobile fills width. |
 | B6-DT | Detail §2.4 신규: EarningsGuidance + OptionsChainMini | `app/src/pages/detail/EarningsGuidance.tsx`, `OptionsChainMini.tsx`, `index.tsx` | frontend-ui-integrator | ✅ | EarningsGuidance `6dcbf36` · OptionsChainMini `7f3e1ec`. Per-quarter bar pair (est vs actual, dashed orange for forward Q) + tabular history with surprise %. IV heatmap rows=expiries × cols=strikes, blue→white→red gradient, ATM-strike highlighted. |
 
+### 배치 B8 — UX 보강 + 백테스트 + AI 영속 (8 항목 동시 dispatch)
+
+| ID | Task | 파일 | Agent | Status | Notes |
+|---|---|---|---|---|---|
+| B8-PF-CRUD | Portfolio mutation endpoints (POST/PUT/PATCH/DELETE for trades/holdings/summary/watchlist) | `server/src/routes/portfolio.ts`, `app/src/data/portfolio.ts` | main (재실행) | ✅ | `babbccd`. 8 endpoints. 모든 mutation이 localStore.write → Sheets mirror 자동 트리거. 케이스-인센시티브 symbol 매칭, 409 on duplicate, 400 on bad shape. apiSend helper로 204 처리. 처음 dispatch한 backend agent가 permissions skill 함정에 빠져 main이 직접 처리. |
+| B8-MACRO-FX | USD/KRW MOCK fallback realistic seed | `server/src/routes/market.ts` | main | ✅ | live yahoo는 정상 (`1,471.2` / `-0.14%`)이었지만 MOCK_MACRO가 em-dash라 첫 paint 빈 카드. 1,400 / +0.00% 시드로 교체. |
+| B8-OV-WS | Workspaces clickable shortcuts | `app/src/pages/overview/Workspaces.tsx` | frontend-ui-integrator (worktree 차단으로 shared tree) | ✅ | `8263b00` + `f7a6c00`. 6 shortcut → useNavigate. `<button>` (role=link 대신 — topbar smoke test 충돌 회피). |
+| B8-OV-CHART | HeroChart re-fetch on range/symbol change | `app/src/pages/overview/HeroChart.tsx` | frontend-ui-integrator | ✅ | `f730763`. deps `[symbol, range]`, loading dim 0.7/0.5 (refetch/cold). |
+| B8-OV-IDX | IndicesStrip → tradable proxy on click | `app/src/pages/overview/IndicesStrip.tsx`, `app/src/lib/indexProxy.ts` | frontend-ui-integrator | ✅ | `2acfec5`. ^GSPC→SPY, ^IXIC→QQQ, ^DJI→DIA, ^VIX→VIXY, ^TNX→TLT, ^KS11/^KQ11→EWY. proxy 없으면 aria-disabled (DXY, BTC). |
+| B8-OV-HEAT | SectorHeatmap expand + sector labels | `app/src/pages/overview/SectorHeat.tsx`, `app/src/data/market.ts`, `app/src/data/types.ts` | frontend-ui-integrator | ✅ | `ffb6596` + `19aa3c5` (visual baseline regen). 10 sector × 5 cells = 50 well-known tickers. sector 라벨 좌측 컬럼, hover tooltip `TICKER · SECTOR · PCT`. Constituent에 `sector?: string` 필드 추가. |
+| B8-AI-TAB | AI Assistant 별도 탭 + 영역별 history hydration | `server/src/storage/ai-history.ts`, `server/src/routes/ai.ts`, `app/src/data/{ai,aiHistoryTypes}.ts`, `app/src/lib/useOnDemand.ts`, `app/src/pages/{ai-assistant,overview/AISignals,portfolio/AIInsightsFeed,detail/AIInvestmentGuide,geo/AIHedgeSuggestion}` | frontend-ui-integrator | ✅ | `aafa714` + `eecdb8b` + `c0f42df`. ~/.intelistock/ai-history.json (FIFO 50/area, atomic). GET /api/ai/history(?area=&limit=). 페이지별 카드는 outer/inner 컴포넌트 분리로 hooks-rule 위반 회피, 마운트 시 hydrate. /ai-assistant: WAI-ARIA tablist 4탭, Re-run 버튼, 800ms 후 reload. AIInsightsFeed의 Rules-of-Hooks 버그 잡아 Portfolio E2E 3개 통과. |
+| B8-SIM | 백테스트 엔진 + /leaderboard | `server/src/lib/backtest.ts`, `server/src/storage/strategies.ts`, `server/src/routes/sim.ts`, `server/src/index.ts`, `app/src/data/strategies.ts`, `app/src/pages/leaderboard/{index,EquityCurveChart,NewStrategyForm}.tsx`, `app/src/styles.css` | frontend-ui-integrator | ✅ | `9a2b358` + `eeaab8f` + `03239bd` + `128538d`. Buy-and-hold 데일리 close (no rebalancing/costs/dividends). Yahoo 1h cache 위에 sim layer. metrics: total/annualized return, sharpe, max DD, volatility. SPY 벤치마크 best-effort. /leaderboard: form (textarea SYMBOL:weight 라이브 Σ 검증), ranked table 행 expand → equity curve, top-3+SPY overlay (pure SVG). 단일 사용자 파일 백킹 (`~/.intelistock/strategies.json`). |
+
+> **Note (worktree 격리 차단)**: B8 dispatch 당시 환경에서 `Agent({isolation:'worktree'})`가 실패해 4 에이전트가 같은 working tree에서 병렬 실행됨. 사전에 `App.tsx`에 `/ai-assistant` + `/leaderboard` 라우트 + nav 항목, stub 페이지를 미리 커밋(`e8d360f`)하고 각 에이전트에 strict file whitelist를 줘서 staging-bleed 최소화. 그래도 styles.css 한 블록이 B8-AI-TAB → B8-SIM commit으로 cross-merge되긴 했음 (내용 보존됨, 함수적 영향 없음).
+
 ### 배치 B5 — 사용자/포트폴리오 영속화 (선택)
 
 | ID | Task | 파일 | Agent | Status | Notes |
@@ -256,6 +271,7 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 - 실행: `npm run dev` (root) → Vite :5180 + Express :3001. ⌘K 검색·`/detail/<TICKER>` 직접 URL·Tweaks Provider 셀렉트 모두 동작.
 - ✅ **B5-AU + B5-CR** — Supabase auth + portfolio sync (graceful degrade: local mode preserved). 13 commits. 34 E2E + 62 unit all green.
 - ✅ **B5-GS** — Google Sheets append-only 미러 (로컬 JSON이 source-of-truth). OAuth2 installed-app flow + 12-tab 누적 (8 portfolio + 4 AI). 모든 row에 `synced_at` (ISO8601 UTC) 첫 컬럼. AI 생성 결과(verdict/hedge/signals/insights)도 매 호출마다 자동 append (token usage 포함). Settings UI: Connect Google → Create/Link spreadsheet → Sync now. 매 `localStore.write()` 후 자동 미러 (실패 시 lastSyncError 기록만 하고 로컬 저장은 성공). 가드: GOOGLE_CLIENT_ID/SECRET 미설정 → 503, 토큰 없음 → 401, 시트 미선택 → 400.
+- ✅ **B8 (8/8)** — Portfolio CRUD endpoints (8 mutation handlers) + USD/KRW seed; Overview 4 fixes (Workspaces 클릭, HeroChart 동적 refetch, IndicesStrip→ETF 프록시, SectorHeatmap 50종목+섹터 라벨); AI Assistant 별도 탭 (`/ai-assistant`)에서 영역별 영속 history (~/.intelistock/ai-history.json, FIFO 50/area, 페이지별 카드 hydrate); 백테스트 엔진 + `/leaderboard` (buy-and-hold, SPY 벤치마크, equity overlay). 4 에이전트 dispatch (1개 실패해 main이 직접 처리). 21/21 visual + 13/13 functional E2E + 62/62 unit 통과.
 
 - ✅ **Phase 1 완료 (7/7)** — 두 라운드에 걸쳐 모두 완료:
   - B1-OV ✅ 9/9 · B1-PF ✅ 4/4 · B1-DT ✅ 7/7 · B1-GE ✅ 5/5
