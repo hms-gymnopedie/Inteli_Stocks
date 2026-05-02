@@ -39,10 +39,82 @@ export async function getIntraday(symbol: string, range: Range): Promise<OHLC[]>
   return apiFetch<OHLC[]>(`/market/intraday?symbol=${encodeURIComponent(symbol)}&range=${range}`);
 }
 
-/** Returns S&P 500 heatmap constituents with day % change. */
+/**
+ * Returns ~50 well-known S&P 500 constituents with day % change AND a
+ * sector label so the SectorHeat grid can group by sector (B8-OV-HEAT).
+ *
+ * Bypasses the backend mock (which returns 24 tickers without sectors)
+ * because client-side grouping needs the sector field. The day pct
+ * values are seed numbers — when B2-MD-3 adds a real constituents
+ * fetcher with sector data this should swap back to apiFetch.
+ */
 export async function getSPConstituents(): Promise<Constituent[]> {
-  return apiFetch<Constituent[]>('/market/sp-constituents');
+  return SP_CONSTITUENTS;
 }
+
+/** 50-ticker constituents data with sector labels (B8-OV-HEAT). */
+const SP_CONSTITUENTS: Constituent[] = [
+  // Tech (5)
+  { t: 'AAPL',  v:  1.4, sector: 'Tech' },
+  { t: 'MSFT',  v:  0.8, sector: 'Tech' },
+  { t: 'GOOGL', v: -0.4, sector: 'Tech' },
+  { t: 'AMZN',  v:  0.9, sector: 'Tech' },
+  { t: 'META',  v:  1.1, sector: 'Tech' },
+  // Semis (5)
+  { t: 'NVDA',  v:  3.2, sector: 'Semis' },
+  { t: 'AMD',   v:  2.1, sector: 'Semis' },
+  { t: 'TSM',   v:  1.5, sector: 'Semis' },
+  { t: 'AVGO',  v:  0.6, sector: 'Semis' },
+  { t: 'INTC',  v: -1.3, sector: 'Semis' },
+  // Software (5)
+  { t: 'ORCL',  v: -0.7, sector: 'Software' },
+  { t: 'CRM',   v:  1.0, sector: 'Software' },
+  { t: 'ADBE',  v:  0.5, sector: 'Software' },
+  { t: 'NOW',   v:  1.7, sector: 'Software' },
+  { t: 'INTU',  v:  0.3, sector: 'Software' },
+  // Communication (5)
+  { t: 'NFLX',  v:  2.4, sector: 'Communication' },
+  { t: 'DIS',   v:  0.5, sector: 'Communication' },
+  { t: 'T',     v: -0.2, sector: 'Communication' },
+  { t: 'VZ',    v: -0.1, sector: 'Communication' },
+  { t: 'CMCSA', v:  0.4, sector: 'Communication' },
+  // Financials (5)
+  { t: 'JPM',   v:  0.3, sector: 'Financials' },
+  { t: 'BAC',   v: -0.6, sector: 'Financials' },
+  { t: 'GS',    v:  0.9, sector: 'Financials' },
+  { t: 'V',     v:  0.2, sector: 'Financials' },
+  { t: 'MA',    v:  0.4, sector: 'Financials' },
+  // Healthcare (5)
+  { t: 'UNH',   v:  0.4, sector: 'Healthcare' },
+  { t: 'JNJ',   v: -0.3, sector: 'Healthcare' },
+  { t: 'LLY',   v:  2.6, sector: 'Healthcare' },
+  { t: 'PFE',   v:  1.6, sector: 'Healthcare' },
+  { t: 'ABBV',  v:  0.7, sector: 'Healthcare' },
+  // Energy (5)
+  { t: 'XOM',   v: -1.2, sector: 'Energy' },
+  { t: 'CVX',   v: -0.9, sector: 'Energy' },
+  { t: 'COP',   v: -1.4, sector: 'Energy' },
+  { t: 'SLB',   v: -0.6, sector: 'Energy' },
+  { t: 'EOG',   v: -1.0, sector: 'Energy' },
+  // Industrials (5)
+  { t: 'GE',    v:  0.8, sector: 'Industrials' },
+  { t: 'CAT',   v: -0.4, sector: 'Industrials' },
+  { t: 'BA',    v: -3.6, sector: 'Industrials' },
+  { t: 'HON',   v:  0.2, sector: 'Industrials' },
+  { t: 'UPS',   v: -0.8, sector: 'Industrials' },
+  // Cons. Disc. (5)
+  { t: 'HD',    v: -0.2, sector: 'Cons. Disc.' },
+  { t: 'NKE',   v:  1.9, sector: 'Cons. Disc.' },
+  { t: 'MCD',   v:  0.3, sector: 'Cons. Disc.' },
+  { t: 'SBUX',  v: -0.5, sector: 'Cons. Disc.' },
+  { t: 'LOW',   v:  0.1, sector: 'Cons. Disc.' },
+  // Cons. Staples (5)
+  { t: 'WMT',   v:  0.1, sector: 'Cons. Staples' },
+  { t: 'COST',  v:  0.7, sector: 'Cons. Staples' },
+  { t: 'PG',    v:  0.2, sector: 'Cons. Staples' },
+  { t: 'KO',    v: -0.3, sector: 'Cons. Staples' },
+  { t: 'PEP',   v:  0.4, sector: 'Cons. Staples' },
+];
 
 /**
  * Returns sector returns for the requested range.

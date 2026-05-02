@@ -51,6 +51,8 @@ export interface SectorReturn {
 export interface Constituent {
   t: string;   // ticker symbol
   v: number;   // day percent change
+  /** Optional sector label used by SectorHeat for grouping (B8-OV-HEAT). */
+  sector?: string;
 }
 
 /** Keys for macro indicators. */
