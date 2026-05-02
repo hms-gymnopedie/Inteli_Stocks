@@ -33,12 +33,22 @@ export interface OnDemandHandle<T> extends OnDemandState<T> {
   reset: () => void;
 }
 
-export function useOnDemand<T>(fn: () => Promise<T>): OnDemandHandle<T> {
+export interface OnDemandInitial<T> {
+  /** Pre-populate `data` (e.g. hydrated from server-side history). */
+  data?: T;
+  /** Epoch ms timestamp to use for `lastReceivedAt`. */
+  receivedAt?: number;
+}
+
+export function useOnDemand<T>(
+  fn: () => Promise<T>,
+  initial?: OnDemandInitial<T>,
+): OnDemandHandle<T> {
   const [state, setState] = useState<OnDemandState<T>>({
-    data: undefined,
-    loading: false,
-    error: undefined,
-    lastReceivedAt: null,
+    data:           initial?.data,
+    loading:        false,
+    error:          undefined,
+    lastReceivedAt: initial?.data !== undefined ? initial?.receivedAt ?? Date.now() : null,
   });
   // Newer runs invalidate older ones — prevents a slow earlier response
   // from clobbering a newer (faster) result.
@@ -98,13 +108,27 @@ export interface OnDemandStreamHandle<T, M = unknown> {
   reset: () => void;
 }
 
+export interface OnDemandStreamInitial<T, M = unknown> {
+  /** Pre-populated items (each becomes an `OnDemandStreamItem` w/ `receivedAt`). */
+  items?: T[];
+  /** Stream meta (e.g. AI token usage) to seed alongside items. */
+  meta?: M | null;
+  /** Epoch ms applied to every seeded item. Defaults to Date.now() at mount. */
+  receivedAt?: number;
+}
+
 export function useOnDemandStream<T, M = unknown>(
   fn: (onMeta?: (m: M) => void) => AsyncIterable<T>,
+  initial?: OnDemandStreamInitial<T, M>,
 ): OnDemandStreamHandle<T, M> {
-  const [items, setItems] = useState<OnDemandStreamItem<T>[]>([]);
+  const [items, setItems] = useState<OnDemandStreamItem<T>[]>(() => {
+    if (!initial?.items?.length) return [];
+    const at = initial.receivedAt ?? Date.now();
+    return initial.items.map((data) => ({ data, receivedAt: at }));
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | undefined>(undefined);
-  const [meta, setMeta] = useState<M | null>(null);
+  const [meta, setMeta] = useState<M | null>(initial?.meta ?? null);
   const runIdRef = useRef(0);
 
   const run = useCallback(() => {

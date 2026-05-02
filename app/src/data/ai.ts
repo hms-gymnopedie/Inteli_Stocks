@@ -17,6 +17,7 @@ import type {
   ConvictionAxis,
   HedgeProposal,
 } from './types';
+import type { AIHistory, Area, HistoryEntry } from './aiHistoryTypes';
 
 /**
  * Synthetic AIMeta returned alongside mock fallback data when the backend
@@ -395,6 +396,57 @@ export async function getVerdict(symbol: string): Promise<AIResponse<AIVerdict>>
   } catch {
     await delay();
     return { data: mockVerdict(symbol), meta: MOCK_META };
+  }
+}
+
+// ─── Persistent history (B8-AI-TAB) ──────────────────────────────────────────
+
+/**
+ * Returns server-persisted AI generation history.
+ *   - With `area`: returns the most recent N entries for that area only.
+ *   - Without `area`: returns all four lists at once.
+ *
+ * On any network or shape error, resolves to an empty list/object so the UI
+ * just renders the empty state rather than throwing.
+ */
+export async function getAIHistory(): Promise<AIHistory>;
+export async function getAIHistory(area: Area, limit?: number): Promise<HistoryEntry[]>;
+export async function getAIHistory(area?: Area, limit?: number): Promise<AIHistory | HistoryEntry[]> {
+  const params = new URLSearchParams();
+  if (area)              params.set('area', area);
+  if (typeof limit === 'number') params.set('limit', String(limit));
+  const qs  = params.toString();
+  const url = `${AI_BASE}/history${qs ? `?${qs}` : ''}`;
+
+  const empty: AIHistory = { signals: [], insights: [], verdicts: [], hedges: [] };
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return area ? [] : empty;
+    const json = (await res.json()) as unknown;
+
+    if (area) {
+      // Server response with `?area=` is `{ area, entries: HistoryEntry[] }`.
+      if (json && typeof json === 'object' && 'entries' in (json as Record<string, unknown>)) {
+        const entries = (json as { entries: unknown }).entries;
+        return Array.isArray(entries) ? (entries as HistoryEntry[]) : [];
+      }
+      return [];
+    }
+    if (json && typeof json === 'object') return json as AIHistory;
+    return empty;
+  } catch {
+    return area ? [] : empty;
+  }
+}
+
+/** Empties one area on the server. Returns true on 204, false otherwise. */
+export async function clearAIHistory(area: Area): Promise<boolean> {
+  try {
+    const res = await fetch(`${AI_BASE}/history/${area}`, { method: 'DELETE' });
+    return res.status === 204;
+  } catch {
+    return false;
   }
 }
 

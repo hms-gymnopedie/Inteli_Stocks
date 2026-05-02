@@ -1,5 +1,8 @@
-import { streamSignals } from '../../data/ai';
+import { useEffect, useMemo, useState } from 'react';
+
+import { getAIHistory, streamSignals } from '../../data/ai';
 import type { AIMeta, AISignal } from '../../data/types';
+import type { HistoryEntry } from '../../data/aiHistoryTypes';
 import { AITokenFooter } from '../../lib/AITokenFooter';
 import { formatTime } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
@@ -19,15 +22,68 @@ export function AISignals() {
     : tz === 'Europe/London'   ? 'LDN'
     : 'UTC';
 
-  const stream = useOnDemandStream<AISignal, AIMeta>((onMeta) =>
-    streamSignals(onMeta),
+  // Hydration from server-persisted history. Mounts blank, then once we hear
+  // back from /api/ai/history with the most-recent batch we re-mount the
+  // useOnDemandStream hook with that batch as `initial`. The `hydratedKey`
+  // change forces React to discard the empty hook instance.
+  const [hydration, setHydration] = useState<{
+    items: AISignal[];
+    meta:  AIMeta | null;
+    at:    number;
+  } | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAIHistory('signals', 1).then((entries: HistoryEntry[]) => {
+      if (cancelled) return;
+      const latest = entries.at(-1);
+      if (latest) {
+        const items = Array.isArray(latest.data) ? (latest.data as AISignal[]) : [];
+        setHydration({
+          items,
+          meta: { provider: latest.provider as AIMeta['provider'], model: latest.model, usage: latest.usage },
+          at:   latest.createdAt,
+        });
+      }
+      setHydrated(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Re-instantiate the on-demand stream with hydrated initial state once
+  // history loads (or with no initial if the area is empty).
+  return hydrated
+    ? <AISignalsInner hydration={hydration} tz={tz} tzAbbrev={tzAbbrev} />
+    : <AISignalsInner hydration={null} tz={tz} tzAbbrev={tzAbbrev} loadingHistory />;
+}
+
+interface InnerProps {
+  hydration: { items: AISignal[]; meta: AIMeta | null; at: number } | null;
+  tz:        string;
+  tzAbbrev:  string;
+  loadingHistory?: boolean;
+}
+
+function AISignalsInner({ hydration, tz, tzAbbrev, loadingHistory }: InnerProps) {
+  const initial = useMemo(
+    () => hydration
+      ? { items: hydration.items, meta: hydration.meta, receivedAt: hydration.at }
+      : undefined,
+    [hydration],
+  );
+  const stream = useOnDemandStream<AISignal, AIMeta>(
+    (onMeta) => streamSignals(onMeta),
+    initial,
   );
 
   return (
     <div>
       <div className="row between">
         <div className="wf-label">AI Assistant</div>
-        {stream.loading ? (
+        {loadingHistory ? (
+          <span className="ai-badge loading">Loading…</span>
+        ) : stream.loading ? (
           <span className="ai-badge loading">Generating…</span>
         ) : stream.error ? (
           <span className="ai-badge err" title={stream.error.message}>Failed</span>

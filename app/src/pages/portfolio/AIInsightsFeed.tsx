@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { streamInsights } from '../../data/ai';
+import { getAIHistory, streamInsights } from '../../data/ai';
+import type { HistoryEntry } from '../../data/aiHistoryTypes';
 import type { AICategory, AIInsight, AIMeta } from '../../data/types';
 import { AITokenFooter } from '../../lib/AITokenFooter';
 import { formatTime } from '../../lib/format';
@@ -28,9 +29,55 @@ export function AIInsightsFeed() {
     : tz === 'Europe/London'   ? 'LDN'
     : 'UTC';
 
-  const stream = useOnDemandStream<AIInsight, AIMeta>((onMeta) =>
-    streamInsights('default', onMeta),
+  // Hydrate from server history on mount.
+  const [hydration, setHydration] = useState<{
+    items: AIInsight[];
+    meta:  AIMeta | null;
+    at:    number;
+  } | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAIHistory('insights', 1).then((entries: HistoryEntry[]) => {
+      if (cancelled) return;
+      const latest = entries.at(-1);
+      if (latest) {
+        const items = Array.isArray(latest.data) ? (latest.data as AIInsight[]) : [];
+        setHydration({
+          items,
+          meta: { provider: latest.provider as AIMeta['provider'], model: latest.model, usage: latest.usage },
+          at:   latest.createdAt,
+        });
+      }
+      setHydrated(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const initial = useMemo(
+    () => hydration
+      ? { items: hydration.items, meta: hydration.meta, receivedAt: hydration.at }
+      : undefined,
+    [hydration],
   );
+
+  const stream = useOnDemandStream<AIInsight, AIMeta>(
+    (onMeta) => streamInsights('default', onMeta),
+    // useOnDemandStream's initial state is read once on first mount; re-keying
+    // the parent on `hydrated` (below) forces a fresh hook instance.
+    initial,
+  );
+
+  if (!hydrated) {
+    // Brief skeleton header so we don't flash an empty "Idle" badge.
+    return (
+      <aside style={{ borderLeft: '1px solid var(--hairline)', padding: 14 }}>
+        <div className="wf-label">AI Insights · On-demand</div>
+        <div className="ai-empty" style={{ marginTop: 12 }}>Loading history…</div>
+      </aside>
+    );
+  }
 
   const [filter, setFilter] = useState<AICategory | 'ALL'>('ALL');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);

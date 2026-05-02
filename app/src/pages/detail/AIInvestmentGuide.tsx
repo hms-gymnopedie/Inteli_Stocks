@@ -1,5 +1,8 @@
-import { getVerdict } from '../../data/ai';
-import type { AIResponse, AIVerdict, ConvictionAxis } from '../../data/types';
+import { useEffect, useMemo, useState } from 'react';
+
+import { getAIHistory, getVerdict } from '../../data/ai';
+import type { HistoryEntry } from '../../data/aiHistoryTypes';
+import type { AIMeta, AIResponse, AIVerdict, ConvictionAxis } from '../../data/types';
 import { AITokenFooter } from '../../lib/AITokenFooter';
 import { formatTime } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
@@ -26,7 +29,56 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
     : tz === 'Europe/London'   ? 'LDN'
     : 'UTC';
 
-  const verdict = useOnDemand<AIResponse<AIVerdict>>(() => getVerdict(symbol));
+  // Hydrate from server-persisted history. Pull last 50 entries and pick
+  // the most-recent one whose `symbol` matches the current ticker.
+  const upper = symbol.trim().toUpperCase();
+  const [seed, setSeed] = useState<{ data: AIResponse<AIVerdict>; at: number } | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(false);
+    setSeed(null);
+    let cancelled = false;
+    getAIHistory('verdicts', 50).then((entries: HistoryEntry[]) => {
+      if (cancelled) return;
+      // entries are oldest-first; iterate from the end.
+      for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i];
+        if ((e.symbol ?? '').toUpperCase() === upper) {
+          const meta: AIMeta = {
+            provider: e.provider as AIMeta['provider'],
+            model:    e.model,
+            usage:    e.usage,
+          };
+          setSeed({ data: { data: e.data as AIVerdict, meta }, at: e.createdAt });
+          break;
+        }
+      }
+      setHydrated(true);
+    });
+    return () => { cancelled = true; };
+  }, [upper]);
+
+  const initial = useMemo(
+    () => seed ? { data: seed.data, receivedAt: seed.at } : undefined,
+    [seed],
+  );
+
+  return hydrated
+    ? <Inner symbol={symbol} initial={initial} tz={tz} tzAbbrev={tzAbbrev} />
+    : <Inner symbol={symbol} initial={undefined} tz={tz} tzAbbrev={tzAbbrev} loadingHistory />;
+}
+
+interface InnerProps {
+  symbol:    string;
+  initial:   { data: AIResponse<AIVerdict>; receivedAt: number } | undefined;
+  tz:        string;
+  tzAbbrev:  string;
+  loadingHistory?: boolean;
+}
+
+function Inner({ symbol, initial, tz, tzAbbrev, loadingHistory }: InnerProps) {
+  const verdict = useOnDemand<AIResponse<AIVerdict>>(() => getVerdict(symbol), initial);
   const result = verdict.data?.data;
   const meta = verdict.data?.meta ?? null;
   const axes = result?.axes ?? PLACEHOLDER_AXES;
@@ -36,7 +88,9 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
     <div>
       <div className="row between">
         <div className="wf-label">AI Investment Guide</div>
-        {verdict.loading ? (
+        {loadingHistory ? (
+          <span className="ai-badge loading">Loading…</span>
+        ) : verdict.loading ? (
           <span className="ai-badge loading">Generating…</span>
         ) : verdict.error ? (
           <span className="ai-badge err" title={verdict.error.message}>Failed</span>
