@@ -33,6 +33,7 @@ import type {
 import { AITokenFooter } from '../../lib/AITokenFooter';
 import { estimateCost, formatUSD } from '../../lib/aiPricing';
 import { formatTime } from '../../lib/format';
+import { HelpPopover } from '../../lib/HelpPopover';
 import { useTweaks } from '../../lib/tweaks';
 
 const AREAS: ReadonlyArray<{ id: Area; label: string; help: string }> = [
@@ -285,7 +286,23 @@ function UsagePanel({ history }: UsagePanelProps) {
 
   return (
     <aside className="ai-usage-panel" aria-label="AI usage summary">
-      <div className="wf-label">AI Usage</div>
+      <div className="row between center">
+        <div className="wf-label">AI Usage</div>
+        <HelpPopover label="How cost is calculated" title="Cost calculation" placement="bottom-end">
+          <p style={{ margin: '0 0 6px' }}>
+            Cost is computed locally from each call's token usage and the
+            published rates in <code>app/src/lib/aiPricing.ts</code>:
+          </p>
+          <ul>
+            <li><strong>Anthropic</strong>: <code>input × full + cache_read × ~10% + cache_write × ~125% + output × full</code></li>
+            <li><strong>Gemini</strong>: <code>(prompt − cached) × full + cached × ~25% + output × full</code></li>
+          </ul>
+          <p style={{ margin: '6px 0 0' }}>
+            Rates are per 1 M tokens. Estimates are approximate; check your
+            provider console for billing.
+          </p>
+        </HelpPopover>
+      </div>
       <div className="wf-mini muted-2" style={{ marginTop: 2, marginBottom: 14 }}>
         Lifetime — across all areas
       </div>

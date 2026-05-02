@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { getEquityCurve } from '../../data/portfolio';
 import type { EquityPoint, Range } from '../../data/types';
+import { formatDateAxis } from '../../lib/format';
 import { useAsync } from '../../lib/useAsync';
 import { useTweaks } from '../../lib/tweaks';
 
@@ -50,11 +51,9 @@ function fmtUSD(v: number): string {
 }
 
 function fmtDateShort(ts: number, range: Range): string {
-  const d = new Date(ts);
-  if (range === '5Y' || range === '1Y' || range === 'YTD') {
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
-  }
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  // Year shown for ranges spanning 6M+; shorter ranges fit cleaner without it.
+  const withYear = range === 'YTD' || range === '1Y' || range === '5Y' || range === '6M' || range === 'MAX';
+  return formatDateAxis(ts, { withYear });
 }
 
 export function EquityCurve() {
@@ -71,14 +70,15 @@ export function EquityCurve() {
   const innerH = H - PAD_T - PAD_B;
 
   const [hover, setHover] = useState<{ x: number; idx: number } | null>(null);
+  const [pinned, setPinned] = useState<number[]>([]);
+  useEffect(() => { setPinned([]); }, [range]);
 
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!bounds || points.length < 2) return;
+  function nearestIdx(e: React.MouseEvent<SVGSVGElement>): { idx: number; x: number } | null {
+    if (!bounds || points.length < 2) return null;
     const svg  = e.currentTarget;
     const rect = svg.getBoundingClientRect();
     const vx = ((e.clientX - rect.left) / rect.width) * W;
-    if (vx < PAD_L || vx > W - PAD_R) { setHover(null); return; }
-    // Find nearest point by x.
+    if (vx < PAD_L || vx > W - PAD_R) return null;
     const tsRange = bounds.maxTs - bounds.minTs || 1;
     const targetTs = bounds.minTs + ((vx - PAD_L) / innerW) * tsRange;
     let bestIdx = 0; let bestDelta = Infinity;
@@ -87,8 +87,41 @@ export function EquityCurve() {
       if (d < bestDelta) { bestDelta = d; bestIdx = i; }
     }
     const px = PAD_L + ((points[bestIdx].ts - bounds.minTs) / tsRange) * innerW;
-    setHover({ x: px, idx: bestIdx });
+    return { idx: bestIdx, x: px };
+  }
+
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const r = nearestIdx(e);
+    if (!r) { setHover(null); return; }
+    setHover({ x: r.x, idx: r.idx });
   };
+
+  const onClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    const r = nearestIdx(e);
+    if (!r) return;
+    setPinned((prev) => prev.length >= 2 ? [r.idx] : [...prev, r.idx]);
+  };
+
+  const xForIdx = (idx: number): number => {
+    if (!bounds) return 0;
+    const tsRange = bounds.maxTs - bounds.minTs || 1;
+    return PAD_L + ((points[idx].ts - bounds.minTs) / tsRange) * innerW;
+  };
+  const yForVal = (v: number): number => {
+    if (!bounds) return 0;
+    return PAD_T + (1 - (v - bounds.minV) / (bounds.maxV - bounds.minV || 1)) * innerH;
+  };
+
+  const compare = useMemo(() => {
+    if (pinned.length !== 2) return null;
+    const a = points[pinned[0]];
+    const b = points[pinned[1]];
+    if (!a || !b) return null;
+    const delta = b.value - a.value;
+    const pct = a.value > 0 ? (delta / a.value) * 100 : 0;
+    const days = (b.ts - a.ts) / (24 * 3600_000);
+    return { a, b, delta, pct, days };
+  }, [points, pinned]);
 
   const dimmed = loading && !data ? { opacity: 0.4 } : undefined;
   const startVal = points[0]?.value ?? 0;
@@ -155,8 +188,10 @@ export function EquityCurve() {
             preserveAspectRatio="none"
             onMouseMove={onMove}
             onMouseLeave={() => setHover(null)}
+            onClick={onClick}
             role="img"
             aria-label={`Equity curve ${range}`}
+            style={{ cursor: 'crosshair' }}
           >
             {/* Gridlines (4 horizontal divisions). */}
             {values.showGrid && [0.25, 0.5, 0.75].map((t) => (
@@ -202,6 +237,35 @@ export function EquityCurve() {
             >
               {fmtDateShort(bounds.maxTs, range)}
             </text>
+            {/* Pinned anchors A / B */}
+            {pinned.map((idx, i) => {
+              const pt = points[idx];
+              if (!pt) return null;
+              const x = xForIdx(idx);
+              const y = yForVal(pt.value);
+              const label = i === 0 ? 'A' : 'B';
+              return (
+                <g key={`pin-${idx}-${i}`} pointerEvents="none">
+                  <line
+                    x1={x} x2={x}
+                    y1={PAD_T} y2={H - PAD_B}
+                    stroke="var(--orange)" strokeWidth={1}
+                  />
+                  <circle cx={x} cy={y} r={4} fill="var(--orange)" />
+                  <rect x={x - 7} y={PAD_T - 12} width={14} height={12} fill="var(--orange)" />
+                  <text
+                    x={x} y={PAD_T - 3}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fontFamily="var(--font-mono)"
+                    fill="#000"
+                    fontWeight={700}
+                  >
+                    {label}
+                  </text>
+                </g>
+              );
+            })}
             {/* Crosshair + dot. */}
             {hover && hoverPt && (
               <>
@@ -251,6 +315,57 @@ export function EquityCurve() {
           </div>
         )}
       </div>
+      {compare && (
+        <div
+          className="row between"
+          style={{
+            marginTop: 8,
+            padding: '8px 10px',
+            background: 'var(--panel-2)',
+            border: '1px solid var(--orange)',
+            borderRadius: 4,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+          }}
+          role="status"
+        >
+          <div className="row gap-3 center" style={{ flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--orange)' }}>A</span>
+            <span>{fmtDateShort(compare.a.ts, range)}</span>
+            <span style={{ color: 'var(--fg-3)' }}>{fmtUSD(compare.a.value)}</span>
+            <span style={{ color: 'var(--fg-4)' }}>→</span>
+            <span style={{ color: 'var(--orange)' }}>B</span>
+            <span>{fmtDateShort(compare.b.ts, range)}</span>
+            <span style={{ color: 'var(--fg-3)' }}>{fmtUSD(compare.b.value)}</span>
+          </div>
+          <div className="row gap-3 center">
+            <span
+              style={{
+                color: compare.pct >= 0 ? 'var(--up)' : 'var(--down)',
+                fontWeight: 600,
+              }}
+            >
+              {compare.pct >= 0 ? '+' : '−'}{Math.abs(compare.pct).toFixed(2)}%
+            </span>
+            <span style={{ color: compare.delta >= 0 ? 'var(--up)' : 'var(--down)' }}>
+              {compare.delta >= 0 ? '+' : '−'}{fmtUSD(Math.abs(compare.delta))}
+            </span>
+            <span className="muted">{Math.round(compare.days)}d</span>
+            <button
+              type="button"
+              onClick={() => setPinned([])}
+              style={{
+                background: 'transparent', border: 0,
+                color: 'var(--fg-3)', cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 11,
+              }}
+              aria-label="Clear pinned anchors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

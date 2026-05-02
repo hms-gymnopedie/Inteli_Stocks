@@ -7,6 +7,7 @@ import {
 } from '../../data/portfolio';
 import { getProfile } from '../../data/security';
 import type { Holding } from '../../data/types';
+import { HelpPopover } from '../../lib/HelpPopover';
 import { Spark } from '../../lib/primitives';
 import { useAsync } from '../../lib/useAsync';
 
@@ -133,8 +134,20 @@ export function HoldingsTable() {
   return (
     <div className="wf-panel" style={{ padding: 0 }}>
       <div className="row between" style={{ padding: 12, gap: 12 }}>
-        <div className="wf-label">
+        <div className="wf-label" style={{ display: 'inline-flex', alignItems: 'center' }}>
           Holdings · {data ? `${positionCount} positions` : '— positions'}
+          <HelpPopover label="Holdings columns" title="Holdings columns" placement="bottom-start">
+            <ul>
+              <li><strong>TICKER</strong> — exchange symbol (e.g. NVDA, 005930.KS)</li>
+              <li><strong>NAME</strong> — company name</li>
+              <li><strong>WEIGHT</strong> — % of total NAV</li>
+              <li><strong>PRICE</strong> — last market price (native currency)</li>
+              <li><strong>DAY %</strong> — today's move</li>
+              <li><strong>P/L %</strong> — total profit/loss since purchase</li>
+              <li><strong>30D TREND</strong> — 30-day sparkline (visual only)</li>
+              <li><strong>RISK</strong> — 1–5 risk score (1=defensive, 3=market-typical, 5=high-vol/leveraged/concentrated)</li>
+            </ul>
+          </HelpPopover>
         </div>
         <div className="row gap-2" style={{ alignItems: 'center' }}>
           <input
@@ -268,8 +281,7 @@ export function HoldingsTable() {
                 <Spark seed={r.sparkSeed} trend={0.4} />
                 <span
                   className="tag"
-                  style={{ textAlign: 'center', cursor: 'help' }}
-                  title={`Risk ${r.risk}/5 — 1=defensive (utilities/large-cap blue chips), 2=below-market vol, 3=market-typical, 4=above-market vol/cyclical, 5=high-vol/leveraged/single-name concentration`}
+                  style={{ textAlign: 'center' }}
                 >
                   {r.risk}/5
                 </span>

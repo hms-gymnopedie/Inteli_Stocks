@@ -156,6 +156,29 @@ export function formatDateShort(
 }
 
 /**
+ * Bloomberg-style chart date axis: "NOV 01 2025" — uppercase 3-letter
+ * month, zero-padded day, 4-digit year. Year is omitted when `withYear`
+ * is false (e.g. intraday axes inside a single day). (B11-1)
+ *
+ * @example formatDateAxis(new Date('2025-11-01'))           // "NOV 01 2025"
+ * @example formatDateAxis(new Date('2025-11-01'), { withYear: false }) // "NOV 01"
+ */
+export function formatDateAxis(
+  date: string | number | Date,
+  opts: { withYear?: boolean; timeZone?: string } & LocaleOpts = {},
+): string {
+  const { withYear = true, timeZone, locale = 'en-US' } = opts;
+  const d = new Date(date);
+  const month = new Intl.DateTimeFormat(locale, { month: 'short', timeZone })
+    .format(d)
+    .toUpperCase();
+  const day = new Intl.DateTimeFormat(locale, { day: '2-digit', timeZone }).format(d);
+  if (!withYear) return `${month} ${day}`;
+  const year = new Intl.DateTimeFormat(locale, { year: 'numeric', timeZone }).format(d);
+  return `${month} ${day} ${year}`;
+}
+
+/**
  * Format a currency-coded value. Identical to `formatPrice` with a currency,
  * but reads cleaner at call sites that always have a currency code.
  *

@@ -20,10 +20,12 @@ import { supabaseStore } from '../storage/supabase.js';
 import type {
   Holding,
   PortfolioStorage,
+  PortfolioStore,
   PortfolioSummary,
   Trade,
   WatchlistEntry,
 } from '../storage/types.js';
+import { runBacktest, type EquityPoint as BTEquityPoint } from '../lib/backtest.js';
 
 export const portfolio = Router();
 
@@ -45,27 +47,78 @@ function storeFor(req: Request): PortfolioStorage {
   return localStore;
 }
 
-// ─── Equity curve generator (stateless, unchanged from B2-MD) ────────────────
+// ─── Real equity curve from holdings × historical prices — B11-4 ─────────────
 
 type EquityRange = '1D' | '1W' | '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | 'MAX';
-interface EquityPoint { ts: number; value: number }
 
-function generateEquityCurve(range: EquityRange, seed: number): EquityPoint[] {
-  const barCounts: Partial<Record<EquityRange, number>> = {
-    '1D': 78, '1W': 35, '1M': 22, '3M': 65, '6M': 130,
-    '1Y': 253, '5Y': 260, 'YTD': 83, 'MAX': 520,
-  };
-  const count = barCounts[range] ?? 253;
-  const points: EquityPoint[] = [];
-  let value = 900_000;
-  const now = Date.now();
-  const msPerBar = (365 * 24 * 3600_000) / 253;
-  for (let i = 0; i < count; i++) {
-    const rand = ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280;
-    value = value * (1 + (rand - 0.44) * 0.018);
-    points.push({ ts: now - (count - i) * msPerBar, value });
+/** "12.4%" → 0.124 ; falls back to 0 on bad input. */
+function parseWeight(s: string): number {
+  const m = /^\s*([\d.]+)\s*%/.exec(s);
+  return m ? parseFloat(m[1]) / 100 : 0;
+}
+
+/** Best-effort detection that a holding is USD-priced (the backtest engine
+ *  ignores currency conversion, so we restrict to USD names to keep the
+ *  shape of the curve honest). */
+function isUSDPriced(h: Holding): boolean {
+  const p = (h.price ?? '').trim();
+  return p.startsWith('$') || p.startsWith('-$');
+}
+
+function rangeToStartDate(range: EquityRange): string {
+  const today = new Date();
+  const d = new Date(today);
+  switch (range) {
+    // Daily-close backtest → '1D' degenerate; promote to 1W for a usable curve.
+    case '1D':
+    case '1W':  d.setDate(d.getDate() - 7);            break;
+    case '1M':  d.setMonth(d.getMonth() - 1);          break;
+    case '3M':  d.setMonth(d.getMonth() - 3);          break;
+    case '6M':  d.setMonth(d.getMonth() - 6);          break;
+    case 'YTD': return new Date(today.getFullYear(), 0, 1).toISOString().slice(0, 10);
+    case '1Y':  d.setFullYear(d.getFullYear() - 1);    break;
+    case '5Y':  d.setFullYear(d.getFullYear() - 5);    break;
+    case 'MAX': d.setFullYear(d.getFullYear() - 10);   break;
   }
-  return points;
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Build a buy-and-hold equity curve for the user's current USD holdings,
+ * scaled to end at their actual NAV. Returns [] when no usable holdings or
+ * when the underlying backtest fails — frontend shows "no data" rather than
+ * fabricated numbers.
+ */
+async function realEquityCurve(
+  store: PortfolioStore,
+  range: EquityRange,
+): Promise<BTEquityPoint[]> {
+  const usd = store.holdings.filter(isUSDPriced);
+  if (usd.length === 0) return [];
+
+  const raw = usd.map((h) => ({ symbol: h.symbol, weight: parseWeight(h.weight) }))
+                 .filter((a) => a.weight > 0);
+  const sum = raw.reduce((acc, a) => acc + a.weight, 0);
+  if (sum <= 0) return [];
+  const allocations = raw.map((a) => ({ symbol: a.symbol, weight: a.weight / sum }));
+
+  try {
+    const result = await runBacktest({
+      allocations,
+      startDate: rangeToStartDate(range),
+      endDate:   new Date().toISOString().slice(0, 10),
+    });
+    if (result.equityCurve.length === 0) return [];
+    // Scale so the curve ENDS at the user's reported NAV — keeps the chart
+    // anchored to the real number while preserving the simulated shape.
+    const navTarget = store.summary.nav;
+    const lastValue = result.equityCurve[result.equityCurve.length - 1].value;
+    const k = lastValue > 0 ? navTarget / lastValue : 1;
+    return result.equityCurve.map((p) => ({ ts: p.ts, value: p.value * k }));
+  } catch (err) {
+    console.warn('[portfolio/equity-curve] backtest failed:', (err as Error).message);
+    return [];
+  }
 }
 
 // ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -78,7 +131,15 @@ portfolio.get('/summary', (req: Request, res: Response): void => {
 
 portfolio.get('/equity-curve', (req: Request, res: Response): void => {
   const range = String(req.query.range ?? '1Y') as EquityRange;
-  res.json(generateEquityCurve(range, 42));
+  const store  = storeFor(req);
+  const userId = req.user?.id ?? null;
+  void store.read(userId)
+    .then((s) => realEquityCurve(s, range))
+    .then((curve) => res.json(curve))
+    .catch((err: unknown) => {
+      console.error('[portfolio/equity-curve]', err);
+      res.json([]);
+    });
 });
 
 portfolio.get('/allocation', (req: Request, res: Response): void => {

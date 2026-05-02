@@ -95,14 +95,23 @@ export function estimateCost(meta: AIMeta): number | null {
 }
 
 /**
- * Format a USD amount compactly for the topbar / footer:
- *   ≥ $0.01    → "$0.0123"
- *   ≥ $0.0001  → "$0.000165"
+ * Format a USD amount with magnitude-appropriate precision (B11-7).
+ *   ≥ $1,000   → "$1.23k"     (compact)
+ *   ≥ $1       → "$12.34"     (cents)
+ *   ≥ $0.01    → "$0.0123"    (4 sig figs after dollar)
+ *   ≥ $0.0001  → "$0.000165"  (typical per-call AI cost)
  *   smaller    → "<$0.0001"
+ *   negative   → prepended typographic minus
  */
 export function formatUSD(amount: number): string {
-  if (amount >= 0.01)   return `$${amount.toFixed(4)}`;
-  if (amount >= 0.0001) return `$${amount.toFixed(6)}`;
-  if (amount > 0)       return '<$0.0001';
+  if (amount === 0) return '$0';
+  const sign = amount < 0 ? '−' : '';
+  const abs = Math.abs(amount);
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000)     return `${sign}$${(abs / 1_000).toFixed(2)}k`;
+  if (abs >= 1)         return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 0.01)      return `${sign}$${abs.toFixed(4)}`;
+  if (abs >= 0.0001)    return `${sign}$${abs.toFixed(6)}`;
+  if (abs > 0)          return '<$0.0001';
   return '$0';
 }

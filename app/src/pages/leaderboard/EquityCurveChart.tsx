@@ -12,6 +12,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import type { EquityPoint } from '../../data/strategies';
+import { formatDateAxis } from '../../lib/format';
 
 export interface ChartSeries {
   id:        string;
@@ -83,7 +84,7 @@ function buildPath(
 }
 
 function fmtDate(ts: number): string {
-  return new Date(ts).toISOString().slice(0, 10);
+  return formatDateAxis(ts, { withYear: true });
 }
 
 function fmtPct(pct: number): string {

@@ -2323,6 +2323,76 @@ svg [data-pin='true']:focus-visible {
   .ai-tab-help { display: none; }
 }
 
+/* === HELP POPOVER (B11-5) ============================================ */
+
+.help-popover-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.help-popover-btn {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+  background: var(--panel-2);
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 80ms linear, border-color 80ms linear;
+}
+.help-popover-btn:hover {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+.help-popover-btn[aria-expanded="true"] {
+  color: var(--orange);
+  border-color: var(--orange);
+  background: var(--panel);
+}
+.help-popover-panel {
+  position: absolute;
+  z-index: 80;
+  width: 280px;
+  background: var(--panel);
+  border: 1px solid var(--orange);
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  text-transform: none;
+  letter-spacing: normal;
+}
+.help-pos-bottom-end .help-popover-panel { top: 22px; right: 0; }
+.help-pos-bottom-start .help-popover-panel { top: 22px; left: 0; }
+.help-pos-top-end .help-popover-panel { bottom: 22px; right: 0; }
+.help-pos-top-start .help-popover-panel { bottom: 22px; left: 0; }
+.help-popover-title {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--orange);
+  margin-bottom: 6px;
+}
+.help-popover-body strong { color: var(--fg); }
+.help-popover-body ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.help-popover-body li { margin: 2px 0; }
+
 /* === LEADERBOARD (B8-SIM) ============================================ */
 
 /* Page wrapper — reuses .settings-page base layout but widens cap. */
@@ -2629,6 +2699,106 @@ svg [data-pin='true']:focus-visible {
   padding-top: 10px;
   border-top: 1px solid var(--hairline);
 }
+/* Allocation row builder (B11-6) */
+.lb-alloc-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+.lb-alloc-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 28px;
+  gap: 8px;
+  align-items: stretch;
+}
+.lb-alloc-search {
+  position: relative;
+  min-width: 0;
+}
+.lb-alloc-search > .lb-input { width: 100%; }
+.lb-alloc-locked {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 4px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--orange);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.lb-alloc-name {
+  font-size: 10px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lb-alloc-clear,
+.lb-alloc-remove {
+  background: transparent;
+  border: 0;
+  color: var(--fg-3);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 0 4px;
+}
+.lb-alloc-remove {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lb-alloc-clear:hover,
+.lb-alloc-remove:hover { color: var(--orange); }
+.lb-alloc-results {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: var(--panel);
+  border: 1px solid var(--orange);
+  border-radius: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+}
+.lb-alloc-result {
+  display: grid;
+  grid-template-columns: 80px 1fr auto;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  padding: 6px 10px;
+  text-align: left;
+  color: var(--fg-2);
+}
+.lb-alloc-result:hover { background: var(--panel-2); color: var(--fg); }
+.lb-alloc-exch { font-size: 10px; }
+.lb-alloc-empty {
+  padding: 8px 10px;
+  color: var(--fg-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.lb-alloc-weight {
+  width: 100%;
+  text-align: right;
+}
+
 .lb-overlay-toggle {
   display: inline-flex;
   align-items: center;

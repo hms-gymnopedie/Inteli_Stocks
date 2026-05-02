@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getIntraday } from '../../data/market';
 import type { OHLC, Range } from '../../data/types';
+import { formatDateAxis } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
 import { useAsync } from '../../lib/useAsync';
 
@@ -57,28 +58,25 @@ function fmtVolumeShort(v: number): string {
   return v.toLocaleString();
 }
 
-function fmtDateAxis(ts: number, range: Range): string {
-  const d = new Date(ts);
+function fmtAxisDate(ts: number, range: Range): string {
   if (range === '1D') {
+    const d = new Date(ts);
     return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   }
-  if (range === '5Y' || range === '1Y' || range === 'YTD') {
-    return d.toLocaleDateString(undefined, { year: '2-digit', month: 'short' });
-  }
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  // 1W/1M/3M omit the year; 6M+ include it.
+  const withYear = range === 'YTD' || range === '1Y' || range === '5Y' || range === '6M' || range === 'MAX';
+  return formatDateAxis(ts, { withYear });
 }
 
 function fmtTooltipDate(ts: number, range: Range): string {
-  const d = new Date(ts);
   if (range === '1D') {
+    const d = new Date(ts);
     return d.toLocaleString(undefined, {
-      month: 'short', day: 'numeric',
+      month: 'short', day: '2-digit',
       hour: '2-digit', minute: '2-digit',
-    });
+    }).toUpperCase();
   }
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric', month: 'short', day: 'numeric',
-  });
+  return formatDateAxis(ts, { withYear: true });
 }
 
 export function HeroChart() {
@@ -130,14 +128,20 @@ export function HeroChart() {
   const isUp     = summary ? summary.change >= 0 : true;
   const lineColor = isUp ? 'var(--up)' : 'var(--down)';
 
-  // Hover: snap to nearest bar by x.
+  // Hover: snap to nearest bar by x. Click pins anchors A→B for comparison.
   const [hover, setHover] = useState<{ x: number; idx: number } | null>(null);
-  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!bounds || items.length < 2) return;
+  const [pinned, setPinned] = useState<number[]>([]); // bar indices
+  // Indices are tied to the current range's bars — reset when range/symbol
+  // changes so pin A doesn't end up off-chart.
+  useEffect(() => { setPinned([]); }, [range, symbol]);
+
+  /** Resolve a viewport mouse event to the nearest bar index + svg-x. */
+  function nearestIdx(e: React.MouseEvent<SVGSVGElement>): { idx: number; x: number } | null {
+    if (!bounds || items.length < 2) return null;
     const svg  = e.currentTarget;
     const rect = svg.getBoundingClientRect();
     const vx = ((e.clientX - rect.left) / rect.width) * W;
-    if (vx < PAD_L || vx > W - PAD_R) { setHover(null); return; }
+    if (vx < PAD_L || vx > W - PAD_R) return null;
     const tsRange = bounds.maxTs - bounds.minTs || 1;
     const targetTs = bounds.minTs + ((vx - PAD_L) / innerW) * tsRange;
     let bestIdx = 0; let bestDelta = Infinity;
@@ -146,13 +150,49 @@ export function HeroChart() {
       if (d < bestDelta) { bestDelta = d; bestIdx = i; }
     }
     const px = PAD_L + ((items[bestIdx].ts - bounds.minTs) / tsRange) * innerW;
-    setHover({ x: px, idx: bestIdx });
+    return { idx: bestIdx, x: px };
+  }
+
+  const onMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const r = nearestIdx(e);
+    if (!r) { setHover(null); return; }
+    setHover({ x: r.x, idx: r.idx });
+  };
+
+  const onClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    const r = nearestIdx(e);
+    if (!r) return;
+    setPinned((prev) => {
+      // 0 → 1 anchor (A); 1 → 2 anchors (A+B); 2 → reset back to 1 (third
+      // click starts a new comparison from this point).
+      if (prev.length >= 2) return [r.idx];
+      return [...prev, r.idx];
+    });
   };
 
   const hoverBar = hover ? items[hover.idx] : null;
-  const hoverY = hover && hoverBar && bounds
-    ? PAD_T + (1 - (hoverBar.close - bounds.minV) / (bounds.maxV - bounds.minV || 1)) * innerH
-    : 0;
+  const xForIdx = (idx: number): number => {
+    if (!bounds) return 0;
+    const tsRange = bounds.maxTs - bounds.minTs || 1;
+    return PAD_L + ((items[idx].ts - bounds.minTs) / tsRange) * innerW;
+  };
+  const yForVal = (v: number): number => {
+    if (!bounds) return 0;
+    return PAD_T + (1 - (v - bounds.minV) / (bounds.maxV - bounds.minV || 1)) * innerH;
+  };
+  const hoverY = hoverBar && bounds ? yForVal(hoverBar.close) : 0;
+
+  // A → B comparison metrics when 2 anchors are pinned.
+  const compare = useMemo(() => {
+    if (pinned.length !== 2) return null;
+    const a = items[pinned[0]];
+    const b = items[pinned[1]];
+    if (!a || !b) return null;
+    const delta = b.close - a.close;
+    const pct   = a.close > 0 ? (delta / a.close) * 100 : 0;
+    const days  = (b.ts - a.ts) / (24 * 3600_000);
+    return { a, b, delta, pct, days };
+  }, [items, pinned]);
 
   // X-axis ticks: 5 evenly spaced on the data domain.
   const xTicks = useMemo(() => {
@@ -244,6 +284,8 @@ export function HeroChart() {
             aria-label={`S&P 500 ${range} chart`}
             onMouseMove={onMove}
             onMouseLeave={() => setHover(null)}
+            onClick={onClick}
+            style={{ cursor: 'crosshair' }}
           >
             {/* Y gridlines */}
             {showGrid && [0.25, 0.5, 0.75].map((t) => (
@@ -287,9 +329,43 @@ export function HeroChart() {
                 fontFamily="var(--font-mono)"
                 fill="var(--fg-4)"
               >
-                {fmtDateAxis(t.ts, range)}
+                {fmtAxisDate(t.ts, range)}
               </text>
             ))}
+            {/* Pinned anchors A / B */}
+            {pinned.map((idx, i) => {
+              const bar = items[idx];
+              if (!bar) return null;
+              const x = xForIdx(idx);
+              const y = yForVal(bar.close);
+              const label = i === 0 ? 'A' : 'B';
+              return (
+                <g key={`pin-${idx}-${i}`} pointerEvents="none">
+                  <line
+                    x1={x} x2={x}
+                    y1={PAD_T} y2={H - PAD_B}
+                    stroke="var(--orange)"
+                    strokeWidth={1}
+                  />
+                  <circle cx={x} cy={y} r={4} fill="var(--orange)" />
+                  <rect
+                    x={x - 7} y={PAD_T - 12}
+                    width={14} height={12}
+                    fill="var(--orange)"
+                  />
+                  <text
+                    x={x} y={PAD_T - 3}
+                    textAnchor="middle"
+                    fontSize={9}
+                    fontFamily="var(--font-mono)"
+                    fill="#000"
+                    fontWeight={700}
+                  >
+                    {label}
+                  </text>
+                </g>
+              );
+            })}
             {/* Crosshair */}
             {hover && hoverBar && (
               <>
@@ -365,12 +441,11 @@ export function HeroChart() {
 
       <div className="row between" style={{ marginTop: 8 }}>
         <div className="wf-mini muted">
-          {summary
-            ? `${items.length} bars · last ${new Date(items[items.length - 1].ts).toLocaleString(undefined, {
-                month: 'short', day: 'numeric',
-                hour: '2-digit', minute: '2-digit',
-              })}`
-            : ''}
+          {pinned.length > 0
+            ? `${pinned.length === 2 ? 'A → B pinned' : 'A pinned'} · click chart again to ${pinned.length >= 2 ? 'reset' : 'pin B'}`
+            : summary
+              ? `${items.length} bars · click to pin a comparison anchor`
+              : ''}
         </div>
         <div className="row gap-3 wf-mini">
           {summary ? (
@@ -383,6 +458,62 @@ export function HeroChart() {
           ) : null}
         </div>
       </div>
+
+      {/* Pinned-anchor comparison ribbon */}
+      {compare && (
+        <div
+          className="row between"
+          style={{
+            marginTop: 8,
+            padding: '8px 10px',
+            background: 'var(--panel-2)',
+            border: '1px solid var(--orange)',
+            borderRadius: 4,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+          }}
+          role="status"
+        >
+          <div className="row gap-3 center" style={{ flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--orange)' }}>A</span>
+            <span>{fmtTooltipDate(compare.a.ts, range)}</span>
+            <span style={{ color: 'var(--fg-3)' }}>{fmtPrice(compare.a.close)}</span>
+            <span style={{ color: 'var(--fg-4)' }}>→</span>
+            <span style={{ color: 'var(--orange)' }}>B</span>
+            <span>{fmtTooltipDate(compare.b.ts, range)}</span>
+            <span style={{ color: 'var(--fg-3)' }}>{fmtPrice(compare.b.close)}</span>
+          </div>
+          <div className="row gap-3 center">
+            <span
+              style={{
+                color: compare.pct >= 0 ? 'var(--up)' : 'var(--down)',
+                fontWeight: 600,
+              }}
+            >
+              {compare.pct >= 0 ? '+' : '−'}{Math.abs(compare.pct).toFixed(2)}%
+            </span>
+            <span style={{ color: compare.delta >= 0 ? 'var(--up)' : 'var(--down)' }}>
+              {compare.delta >= 0 ? '+' : '−'}{Math.abs(compare.delta).toFixed(2)}
+            </span>
+            <span className="muted">{Math.round(compare.days)}d</span>
+            <button
+              type="button"
+              onClick={() => setPinned([])}
+              style={{
+                background: 'transparent',
+                border: 0,
+                color: 'var(--fg-3)',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 11,
+              }}
+              aria-label="Clear pinned anchors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

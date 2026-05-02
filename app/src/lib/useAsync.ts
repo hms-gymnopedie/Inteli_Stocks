@@ -132,6 +132,14 @@ export function useAsync<T>(
     const fresh =
       cached !== undefined && (intervalMs === 0 || ageMs < intervalMs);
 
+    // Sync render state to the cache whenever the key changes (e.g. range
+    // tab toggled). Without this, toggling between two already-fresh keys
+    // would never call setState and the chart would stay frozen on the
+    // previous range's data. (B11-2)
+    if (cached !== undefined) {
+      setState({ data: cached.data, loading: false, error: undefined });
+    }
+
     if (isManualRefresh || !fresh) {
       run(cached === undefined);
     }

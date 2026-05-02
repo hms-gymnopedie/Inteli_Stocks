@@ -1,88 +1,104 @@
 /**
- * NewStrategyForm — inline panel for submitting a new backtest.
+ * NewStrategyForm — row-based allocation builder. (B11-6)
  *
- * Allocations are entered as free-form text (one allocation per line OR
- * comma-separated, both `SYMBOL:weight` and `SYMBOL weight` accepted).
- * The running weight sum is shown live with a warning when not ≈1.0.
+ * Each allocation is one row: a ticker search input (autocomplete from
+ * /api/market/search) + a weight slider/number. Click a search match to
+ * lock in the symbol; "+ Add" adds another row; "× Remove" drops one.
+ * "Normalize" button rescales weights so they sum to exactly 1.
  *
  * Submission is async — the parent provides the runBacktest call so this
- * component stays unaware of the API surface (easier to test).
+ * component stays unaware of the API surface.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+
+import { getSearch } from '../../data/market';
+import type { SearchResult } from '../../data/types';
 import type { Allocation, BacktestRequest, Strategy } from '../../data/strategies';
 
 interface Props {
-  /** Called with the form payload when the user clicks Run. */
   onSubmit: (req: BacktestRequest) => Promise<Strategy>;
-  /** Closes the form (parent toggles visibility). */
   onClose:  () => void;
 }
 
-interface ParsedLine {
+interface Row {
+  /** Stable React key. */
+  key:    string;
+  /** Locked-in ticker, or empty string while user is searching. */
   symbol: string;
+  /** Human-readable name from the search match (display only). */
+  name:   string;
+  /** Free-text query while searching; cleared when a match is locked. */
+  query:  string;
+  /** Allocation weight in [0, 1]. */
   weight: number;
 }
 
-/** Parse free-form allocation text → list of {symbol, weight}. */
-function parseAllocations(raw: string): { rows: ParsedLine[]; error: string | null } {
-  const tokens = raw
-    .split(/[\n,]+/g)
-    .map((t) => t.trim())
-    .filter(Boolean);
-  if (tokens.length === 0) {
-    return { rows: [], error: 'enter at least one allocation' };
-  }
-  const rows: ParsedLine[] = [];
-  for (const t of tokens) {
-    // Accept "SYMBOL:weight" or "SYMBOL weight" (single space).
-    const m = t.match(/^([A-Za-z0-9.\-^=]+)\s*[:\s]\s*([0-9]*\.?[0-9]+)$/);
-    if (!m) {
-      return { rows: [], error: `couldn't parse "${t}" — expected SYMBOL:weight` };
-    }
-    const symbol = m[1].toUpperCase();
-    const weight = Number(m[2]);
-    if (!Number.isFinite(weight) || weight <= 0) {
-      return { rows: [], error: `weight for ${symbol} must be a positive number` };
-    }
-    rows.push({ symbol, weight });
-  }
-  // Reject duplicate symbols (server would too, but fail fast in the UI).
-  const seen = new Set<string>();
-  for (const r of rows) {
-    if (seen.has(r.symbol)) return { rows: [], error: `duplicate symbol: ${r.symbol}` };
-    seen.add(r.symbol);
-  }
-  return { rows, error: null };
-}
+let _kctr = 0;
+const newKey = () => `r${++_kctr}`;
 
-/** Default end date = today; default start = 1 year ago. */
+const PRESET: Row[] = [
+  { key: newKey(), symbol: 'AAPL', name: 'Apple Inc.',         query: '', weight: 0.4 },
+  { key: newKey(), symbol: 'MSFT', name: 'Microsoft Corp.',    query: '', weight: 0.3 },
+  { key: newKey(), symbol: 'NVDA', name: 'NVIDIA Corp.',       query: '', weight: 0.3 },
+];
+
 function defaultStartDate(): string {
   const d = new Date();
   d.setFullYear(d.getFullYear() - 1);
   return d.toISOString().slice(0, 10);
 }
 
-const PRESET = 'AAPL:0.4, MSFT:0.3, NVDA:0.3';
-
 export function NewStrategyForm({ onSubmit, onClose }: Props) {
   const [name,        setName]        = useState('');
-  const [allocText,   setAllocText]   = useState(PRESET);
+  const [rows,        setRows]        = useState<Row[]>(PRESET);
   const [startDate,   setStartDate]   = useState(defaultStartDate());
   const [endDate,     setEndDate]     = useState('');
   const [submitting,  setSubmitting]  = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const parsed = useMemo(() => parseAllocations(allocText), [allocText]);
-  const sum = parsed.rows.reduce((a, r) => a + r.weight, 0);
-  const sumOk = parsed.rows.length > 0 && Math.abs(sum - 1) <= 0.01;
+  const sum = useMemo(() => rows.reduce((acc, r) => acc + (r.weight || 0), 0), [rows]);
+  const allReady = rows.every((r) => r.symbol.trim().length > 0 && r.weight > 0);
+  const sumOk = rows.length > 0 && Math.abs(sum - 1) <= 0.01;
+  const dupSymbols = useMemo(() => {
+    const seen = new Set<string>();
+    const dups: string[] = [];
+    for (const r of rows) {
+      if (!r.symbol) continue;
+      if (seen.has(r.symbol.toUpperCase())) dups.push(r.symbol);
+      seen.add(r.symbol.toUpperCase());
+    }
+    return dups;
+  }, [rows]);
 
   const canSubmit =
     !submitting &&
     name.trim().length > 0 &&
-    parsed.error === null &&
+    allReady &&
     sumOk &&
+    dupSymbols.length === 0 &&
     startDate.length === 10;
+
+  function patchRow(key: string, patch: Partial<Row>): void {
+    setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+
+  function addRow(): void {
+    setRows((rs) => [...rs, { key: newKey(), symbol: '', name: '', query: '', weight: 0 }]);
+  }
+
+  function removeRow(key: string): void {
+    setRows((rs) => rs.filter((r) => r.key !== key));
+  }
+
+  function normalize(): void {
+    const s = rows.reduce((acc, r) => acc + (r.weight || 0), 0);
+    if (s <= 0) return;
+    setRows((rs) => rs.map((r) => ({
+      ...r,
+      weight: Number(((r.weight / s)).toFixed(4)),
+    })));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -90,13 +106,16 @@ export function NewStrategyForm({ onSubmit, onClose }: Props) {
     setSubmitting(true);
     setServerError(null);
     try {
-      const req: BacktestRequest = {
+      const allocations: Allocation[] = rows.map((r) => ({
+        symbol: r.symbol.trim().toUpperCase(),
+        weight: r.weight,
+      }));
+      await onSubmit({
         name:        name.trim(),
-        allocations: parsed.rows as Allocation[],
+        allocations,
         startDate,
         endDate:     endDate || undefined,
-      };
-      await onSubmit(req);
+      });
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -134,32 +153,45 @@ export function NewStrategyForm({ onSubmit, onClose }: Props) {
           />
         </label>
 
-        <label className="lb-form-field lb-form-field--wide">
+        <div className="lb-form-field lb-form-field--wide">
           <span className="wf-label">
-            Allocations <span className="muted">— one per line or comma-separated, e.g. AAPL:0.4, MSFT:0.3, NVDA:0.3</span>
+            Allocations <span className="muted">— search ticker, set weight (0–1)</span>
           </span>
-          <textarea
-            className="lb-textarea"
-            value={allocText}
-            onChange={(e) => setAllocText(e.target.value)}
-            rows={4}
-            spellCheck={false}
-            aria-required
-          />
+          <div className="lb-alloc-rows">
+            {rows.map((r) => (
+              <AllocRow
+                key={r.key}
+                row={r}
+                onChange={(patch) => patchRow(r.key, patch)}
+                onRemove={() => removeRow(r.key)}
+                canRemove={rows.length > 1}
+              />
+            ))}
+          </div>
           <div className="lb-form-sumrow">
-            {parsed.error ? (
-              <span className="lb-form-warn">{parsed.error}</span>
-            ) : (
-              <>
-                <span className="wf-mini">{parsed.rows.length} symbol{parsed.rows.length === 1 ? '' : 's'}</span>
-                <span className={'wf-mono ' + (sumOk ? 'up' : 'lb-form-warn')}>
-                  Σ = {sum.toFixed(3)}
-                  {sumOk ? '' : ' — must be ≈ 1.000'}
-                </span>
-              </>
+            <button type="button" className="lb-btn lb-btn-ghost" onClick={addRow}>
+              + Add row
+            </button>
+            <button
+              type="button"
+              className="lb-btn lb-btn-ghost"
+              onClick={normalize}
+              disabled={sum <= 0 || sumOk}
+              title="Rescale weights so they sum to 1.0"
+            >
+              Normalize
+            </button>
+            <span className="wf-mini">
+              {rows.length} symbol{rows.length === 1 ? '' : 's'}
+            </span>
+            <span className={'wf-mono ' + (sumOk ? 'up' : 'lb-form-warn')}>
+              Σ = {sum.toFixed(3)}{sumOk ? '' : ' — must be ≈ 1.000'}
+            </span>
+            {dupSymbols.length > 0 && (
+              <span className="lb-form-warn">duplicate: {dupSymbols.join(', ')}</span>
             )}
           </div>
-        </label>
+        </div>
 
         <label className="lb-form-field">
           <span className="wf-label">Start date</span>
@@ -212,5 +244,143 @@ export function NewStrategyForm({ onSubmit, onClose }: Props) {
         </button>
       </div>
     </form>
+  );
+}
+
+// ─── One allocation row: search + weight + remove ───────────────────────────
+
+interface AllocRowProps {
+  row: Row;
+  onChange: (patch: Partial<Row>) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}
+
+function AllocRow({ row, onChange, onRemove, canRemove }: AllocRowProps) {
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [showResults, setShowResults] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  // Debounced search.
+  useEffect(() => {
+    const q = row.query.trim();
+    if (!q) { setResults([]); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      void getSearch(q)
+        .then((r) => { if (!cancelled) { setResults(r.slice(0, 8)); setShowResults(true); } })
+        .catch(() => { /* swallow */ })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 200);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [row.query]);
+
+  // Close dropdown on outside click.
+  useEffect(() => {
+    if (!showResults) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current) return;
+      if (!wrapRef.current.contains(e.target as Node)) setShowResults(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [showResults]);
+
+  function selectMatch(m: SearchResult): void {
+    onChange({ symbol: m.symbol, name: m.name, query: '' });
+    setResults([]);
+    setShowResults(false);
+    inputRef.current?.blur();
+  }
+
+  function clearSymbol(): void {
+    onChange({ symbol: '', name: '', query: '' });
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  return (
+    <div ref={wrapRef} className="lb-alloc-row">
+      <div className="lb-alloc-search">
+        {row.symbol ? (
+          // Locked: show symbol + name + clear button.
+          <div className="lb-alloc-locked">
+            <span className="ticker">{row.symbol}</span>
+            <span className="lb-alloc-name muted">{row.name}</span>
+            <button
+              type="button"
+              onClick={clearSymbol}
+              aria-label={`Change ${row.symbol}`}
+              className="lb-alloc-clear"
+              title="Change symbol"
+            >
+              ✕
+            </button>
+          </div>
+        ) : (
+          // Searching.
+          <>
+            <input
+              ref={inputRef}
+              type="text"
+              className="lb-input"
+              value={row.query}
+              onChange={(e) => onChange({ query: e.target.value })}
+              onFocus={() => row.query && setShowResults(true)}
+              placeholder="Search ticker or company name…"
+              autoComplete="off"
+              spellCheck={false}
+              aria-label="Symbol search"
+            />
+            {showResults && results.length > 0 && (
+              <ul className="lb-alloc-results" role="listbox">
+                {results.map((m) => (
+                  <li key={m.symbol} role="option" aria-selected={false}>
+                    <button
+                      type="button"
+                      className="lb-alloc-result"
+                      onMouseDown={(e) => { e.preventDefault(); selectMatch(m); }}
+                    >
+                      <span className="ticker">{m.symbol}</span>
+                      <span className="lb-alloc-name">{m.name}</span>
+                      <span className="muted lb-alloc-exch">{m.exchange}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {showResults && !searching && row.query.trim() && results.length === 0 && (
+              <ul className="lb-alloc-results">
+                <li className="lb-alloc-empty">no matches</li>
+              </ul>
+            )}
+          </>
+        )}
+      </div>
+
+      <input
+        type="number"
+        className="lb-input lb-alloc-weight"
+        min="0" max="1" step="0.01"
+        value={row.weight}
+        onChange={(e) => onChange({ weight: Number(e.target.value) })}
+        placeholder="0.0"
+        aria-label="Weight (0-1)"
+      />
+
+      {canRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="lb-alloc-remove"
+          aria-label="Remove row"
+          title="Remove row"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
