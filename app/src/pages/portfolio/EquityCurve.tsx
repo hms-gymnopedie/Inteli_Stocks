@@ -112,11 +112,15 @@ export function EquityCurve() {
     return PAD_T + (1 - (v - bounds.minV) / (bounds.maxV - bounds.minV || 1)) * innerH;
   };
 
+  // Always orient comparison by timestamp: A = earlier, B = later.
+  // % = (later − earlier) / earlier × 100, regardless of click order. (B12-1)
   const compare = useMemo(() => {
     if (pinned.length !== 2) return null;
-    const a = points[pinned[0]];
-    const b = points[pinned[1]];
-    if (!a || !b) return null;
+    const p0 = points[pinned[0]];
+    const p1 = points[pinned[1]];
+    if (!p0 || !p1) return null;
+    const a = p0.ts <= p1.ts ? p0 : p1;
+    const b = p0.ts <= p1.ts ? p1 : p0;
     const delta = b.value - a.value;
     const pct = a.value > 0 ? (delta / a.value) * 100 : 0;
     const days = (b.ts - a.ts) / (24 * 3600_000);
@@ -237,13 +241,19 @@ export function EquityCurve() {
             >
               {fmtDateShort(bounds.maxTs, range)}
             </text>
-            {/* Pinned anchors A / B */}
+            {/* Pinned anchors A / B — chronological labels, not click order. */}
             {pinned.map((idx, i) => {
               const pt = points[idx];
               if (!pt) return null;
               const x = xForIdx(idx);
               const y = yForVal(pt.value);
-              const label = i === 0 ? 'A' : 'B';
+              let label: string;
+              if (pinned.length === 1) {
+                label = 'A';
+              } else {
+                const otherPt = points[pinned[1 - i]];
+                label = (otherPt && pt.ts <= otherPt.ts) ? 'A' : 'B';
+              }
               return (
                 <g key={`pin-${idx}-${i}`} pointerEvents="none">
                   <line

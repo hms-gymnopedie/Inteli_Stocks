@@ -1,9 +1,14 @@
 /**
  * USD cost estimator for an LLM call.
  *
- * Pricing snapshot (per 1 M tokens) baked in below. These rates change
- * occasionally — when they do, edit `PRICING`. Estimates are approximate;
- * for accurate billing always check the provider console.
+ * Pricing snapshot (per 1 M tokens) baked in below — last refreshed
+ * 2026-05-01 against:
+ *   - Anthropic: https://www.anthropic.com/pricing
+ *   - Gemini AI Studio paid tier: https://ai.google.dev/pricing
+ *   (NOT Vertex AI — those rates differ.)
+ * Update PRICING when rates change. Estimates are approximate; **for
+ * authoritative billing always check the provider console** — caching
+ * tier discounts and free-tier rate limits can shift effective cost.
  *
  * Anthropic billing model:
  *   - `usage.input_tokens` is the FRESH (non-cached) prompt portion.
@@ -38,18 +43,20 @@ export const PRICING: Record<string, ModelPricing> = {
   'claude-sonnet-4-6':          { input:  3.00, output: 15.00, cacheRead: 0.30,  cacheWrite:  3.75 },
   'claude-haiku-4-5-20251001':  { input:  1.00, output:  5.00, cacheRead: 0.10,  cacheWrite:  1.25 },
 
-  // ── Google Gemini 2.5 ────────────────────────────────────────────────────
-  // Pro tier flips at 200 k context — we ignore that here (most calls in
-  // this dashboard are well under). Pricing matches the AI Studio / Vertex
-  // entry tier.
-  'gemini-2.5-pro':             { input:  1.25, output: 10.00, cacheRead: 0.3125  },
-  'gemini-2.5-flash':           { input:  0.075, output: 0.30, cacheRead: 0.01875 },
-  'gemini-2.5-flash-lite':      { input:  0.04,  output: 0.15, cacheRead: 0.01    },
+  // ── Google Gemini 2.5 (AI Studio paid tier, mid-2025 GA pricing) ─────────
+  // Pro tier flips above 200 k context (we ignore — almost all dashboard
+  // calls are well under).
+  // Flash and Flash-Lite were re-priced upward at GA — earlier preview
+  // rates ($0.075 in / $0.30 out for Flash; $0.04 / $0.15 for Flash-Lite)
+  // are NO LONGER current. These match ai.google.dev/pricing as of 2026-05.
+  'gemini-2.5-pro':             { input:  1.25, output: 10.00, cacheRead: 0.3125 },
+  'gemini-2.5-flash':           { input:  0.30, output:  2.50, cacheRead: 0.075  },
+  'gemini-2.5-flash-lite':      { input:  0.10, output:  0.40, cacheRead: 0.025  },
 
   // ── Google Gemini 3.1 (preview) ──────────────────────────────────────────
-  // Pricing not yet officially announced; use 2.5 Flash Lite rates as a
-  // placeholder. Update this entry when Google publishes Gemini 3.1 pricing.
-  'gemini-3.1-flash-lite-preview': { input: 0.04, output: 0.15, cacheRead: 0.01, estimated: true },
+  // Official pricing not yet announced — use 2.5 Flash-Lite as a
+  // placeholder and surface "(est)" in the UI so the user knows.
+  'gemini-3.1-flash-lite-preview': { input: 0.10, output: 0.40, cacheRead: 0.025, estimated: true },
 };
 
 /**

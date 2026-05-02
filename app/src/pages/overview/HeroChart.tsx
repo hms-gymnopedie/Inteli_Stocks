@@ -182,12 +182,16 @@ export function HeroChart() {
   };
   const hoverY = hoverBar && bounds ? yForVal(hoverBar.close) : 0;
 
-  // A → B comparison metrics when 2 anchors are pinned.
+  // A → B comparison metrics. Always orient by timestamp so A = earlier
+  // and B = later regardless of click order: % change = (later − earlier)
+  // / earlier × 100. Negative result → price went down. (B12-1)
   const compare = useMemo(() => {
     if (pinned.length !== 2) return null;
-    const a = items[pinned[0]];
-    const b = items[pinned[1]];
-    if (!a || !b) return null;
+    const p0 = items[pinned[0]];
+    const p1 = items[pinned[1]];
+    if (!p0 || !p1) return null;
+    const a = p0.ts <= p1.ts ? p0 : p1;
+    const b = p0.ts <= p1.ts ? p1 : p0;
     const delta = b.close - a.close;
     const pct   = a.close > 0 ? (delta / a.close) * 100 : 0;
     const days  = (b.ts - a.ts) / (24 * 3600_000);
@@ -332,13 +336,23 @@ export function HeroChart() {
                 {fmtAxisDate(t.ts, range)}
               </text>
             ))}
-            {/* Pinned anchors A / B */}
+            {/* Pinned anchors A / B — labels follow timestamp order, not
+                click order, so A is always the earlier date. (B12-1) */}
             {pinned.map((idx, i) => {
               const bar = items[idx];
               if (!bar) return null;
               const x = xForIdx(idx);
               const y = yForVal(bar.close);
-              const label = i === 0 ? 'A' : 'B';
+              // Determine label: if pinned has 2 entries, use chronological;
+              // if only 1, just call it "A".
+              let label: string;
+              if (pinned.length === 1) {
+                label = 'A';
+              } else {
+                const otherIdx = pinned[1 - i];
+                const otherBar = items[otherIdx];
+                label = (otherBar && bar.ts <= otherBar.ts) ? 'A' : 'B';
+              }
               return (
                 <g key={`pin-${idx}-${i}`} pointerEvents="none">
                   <line

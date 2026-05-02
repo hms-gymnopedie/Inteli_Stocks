@@ -145,7 +145,17 @@ export function HoldingsTable() {
               <li><strong>DAY %</strong> — today's move</li>
               <li><strong>P/L %</strong> — total profit/loss since purchase</li>
               <li><strong>30D TREND</strong> — 30-day sparkline (visual only)</li>
-              <li><strong>RISK</strong> — 1–5 risk score (1=defensive, 3=market-typical, 5=high-vol/leveraged/concentrated)</li>
+              <li><strong>RISK</strong> — computed from each ticker's <em>annualised
+                volatility</em> (1Y daily-close σ × √252) and bucketed:
+                <ul style={{ marginTop: 4 }}>
+                  <li>1 — &lt; 15% (defensive: utilities, blue chips)</li>
+                  <li>2 — 15–25% (large-cap typical)</li>
+                  <li>3 — 25–35% (market average)</li>
+                  <li>4 — 35–50% (cyclical/semis/momentum)</li>
+                  <li>5 — ≥ 50% (high-vol, leveraged, single-name concentration)</li>
+                </ul>
+                Recomputed hourly per symbol from yahoo historicals.
+              </li>
             </ul>
           </HelpPopover>
         </div>

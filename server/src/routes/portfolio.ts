@@ -26,6 +26,7 @@ import type {
   WatchlistEntry,
 } from '../storage/types.js';
 import { runBacktest, type EquityPoint as BTEquityPoint } from '../lib/backtest.js';
+import { volatilityScore } from '../lib/risk.js';
 
 export const portfolio = Router();
 
@@ -154,7 +155,18 @@ portfolio.get('/allocation', (req: Request, res: Response): void => {
 portfolio.get('/holdings', (req: Request, res: Response): void => {
   const store  = storeFor(req);
   const userId = req.user?.id ?? null;
-  void store.read(userId).then((s) => { res.json(s.holdings); });
+  void store.read(userId).then(async (s) => {
+    // Replace seed risk with real volatility-based score (B12-2). Compute
+    // in parallel; fall back to the seeded value when the fetch fails so
+    // the UI never goes blank.
+    const enriched = await Promise.all(
+      s.holdings.map(async (h) => {
+        const score = await volatilityScore(h.symbol);
+        return score != null ? { ...h, risk: score } : h;
+      }),
+    );
+    res.json(enriched);
+  });
 });
 
 portfolio.get('/watchlist', (req: Request, res: Response): void => {

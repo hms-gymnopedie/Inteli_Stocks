@@ -31,7 +31,7 @@ import type {
   HedgeProposal,
 } from '../../data/types';
 import { AITokenFooter } from '../../lib/AITokenFooter';
-import { estimateCost, formatUSD } from '../../lib/aiPricing';
+import { estimateCost, formatUSD, PRICING } from '../../lib/aiPricing';
 import { formatTime } from '../../lib/format';
 import { HelpPopover } from '../../lib/HelpPopover';
 import { useTweaks } from '../../lib/tweaks';
@@ -297,9 +297,28 @@ function UsagePanel({ history }: UsagePanelProps) {
             <li><strong>Anthropic</strong>: <code>input × full + cache_read × ~10% + cache_write × ~125% + output × full</code></li>
             <li><strong>Gemini</strong>: <code>(prompt − cached) × full + cached × ~25% + output × full</code></li>
           </ul>
+          <p style={{ margin: '8px 0 4px' }}>
+            <strong>Pricing snapshot — 2026-05-01</strong> (per 1 M tokens):
+          </p>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+            {Object.entries(PRICING).map(([model, p]) => (
+              <li key={model} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 6, fontSize: 10 }}>
+                <span>{model}{p.estimated && <span style={{ color: 'var(--orange)' }}> (est)</span>}</span>
+                <span>${p.input.toFixed(2)}/in</span>
+                <span>${p.output.toFixed(2)}/out</span>
+              </li>
+            ))}
+          </ul>
+          <p style={{ margin: '8px 0 0', color: 'var(--fg-3)' }}>
+            Rates differ between Vertex AI and AI Studio paid tier — these
+            mirror AI Studio. <em>(est)</em> models use placeholder pricing
+            until the provider publishes official rates.
+          </p>
           <p style={{ margin: '6px 0 0' }}>
-            Rates are per 1 M tokens. Estimates are approximate; check your
-            provider console for billing.
+            For authoritative billing, see your{' '}
+            <a href="https://console.anthropic.com/settings/usage" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--orange)' }}>Anthropic console</a>{' '}
+            or{' '}
+            <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--orange)' }}>Google AI Studio</a>.
           </p>
         </HelpPopover>
       </div>
@@ -317,7 +336,9 @@ function UsagePanel({ history }: UsagePanelProps) {
           <div className="wf-num" style={{ fontSize: 22 }}>{fmtTokensShort(stats.totalTokens)}</div>
         </div>
         <div className="ai-usage-stat">
-          <div className="wf-mini muted-2">Est. cost</div>
+          <div className="wf-mini muted-2">
+            Est. cost{stats.hasEstimatedRates && <span style={{ color: 'var(--orange)', marginLeft: 4 }}>(est rates)</span>}
+          </div>
           <div className="wf-num" style={{ fontSize: 22, color: 'var(--orange)' }}>
             {stats.totalCost > 0 ? formatUSD(stats.totalCost) : '$0'}
           </div>
@@ -371,6 +392,8 @@ interface UsageStats {
   byArea: Record<Area, { calls: number; tokens: number; cost: number }>;
   recent:      RecentPoint[];
   lastCallAt:  number | null;
+  /** True when ≥1 entry was costed using estimated/placeholder rates. */
+  hasEstimatedRates: boolean;
 }
 
 function computeStats(h: AIHistory | null): UsageStats {
@@ -383,6 +406,7 @@ function computeStats(h: AIHistory | null): UsageStats {
       hedges:   { calls: 0, tokens: 0, cost: 0 },
     },
     recent: [], lastCallAt: null,
+    hasEstimatedRates: false,
   };
   if (!h) return empty;
   const out = { ...empty, byArea: { ...empty.byArea } };
@@ -400,6 +424,7 @@ function computeStats(h: AIHistory | null): UsageStats {
       model:    entry.model,
       usage:    u,
     }) ?? 0;
+    if (PRICING[entry.model]?.estimated) out.hasEstimatedRates = true;
     out.totalCalls  += 1;
     out.totalTokens += tokens;
     out.totalCost   += cost;
