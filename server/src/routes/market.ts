@@ -79,11 +79,13 @@ const MOCK_SECTORS: SectorReturn[] = [
 /**
  * Minimal mock macro indicators.
  */
+// Realistic seed values so the dashboard never shows em-dashes during the
+// brief window before yahoo first responds (B8-MACRO-FX).
 const MOCK_MACRO = [
-  { key: 'US10Y',   label: 'US 10Y',   value: '—', delta: '—', seed: 11, trend:  0 },
-  { key: 'CPI_YOY', label: 'CPI YoY',  value: '—', delta: '—', seed: 12, trend:  0 },
-  { key: 'USD_KRW', label: 'USD/KRW',  value: '—', delta: '—', seed: 13, trend:  0 },
-  { key: 'WTI',     label: 'WTI Crude',value: '—', delta: '—', seed: 14, trend:  0 },
+  { key: 'US10Y',   label: 'US 10Y',    value: '4.350',  delta: '+0.0bp',  seed: 11, trend:  0.1 },
+  { key: 'CPI_YOY', label: 'CPI YoY',   value: '3.20%',  delta: '−0.10',   seed: 12, trend: -0.3 },
+  { key: 'USD_KRW', label: 'USD/KRW',   value: '1,400',  delta: '+0.00%',  seed: 13, trend:  0.4 },
+  { key: 'WTI',     label: 'WTI Crude', value: '$78.40', delta: '+0.00%',  seed: 14, trend: -0.2 },
 ];
 
 // ─── GET /api/market/indices ──────────────────────────────────────────────────
