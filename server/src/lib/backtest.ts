@@ -19,7 +19,7 @@
  * date range here).
  */
 
-import { fetchHistoricalRange } from '../providers/yahoo.js';
+import { fetchHistoricalRange, type HistInterval } from '../providers/yahoo.js';
 import { TTLCache } from './cache.js';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -46,6 +46,9 @@ export interface BacktestRequest {
   allocations: Allocation[];
   startDate:   string;   // ISO date 'YYYY-MM-DD'
   endDate?:    string;   // ISO date 'YYYY-MM-DD' (default: today)
+  /** Daily-close by default. Use '5m'/'15m'/'30m' for intraday curves
+   *  (yahoo-restricted to ~60 day window). (B15-2) */
+  interval?:   HistInterval;
 }
 
 export interface BacktestResult {
@@ -110,13 +113,15 @@ async function fetchSeries(
   symbol: string,
   startMs: number,
   endMs: number,
+  interval: HistInterval = '1d',
 ): Promise<DailyClose[]> {
-  const key = `series:${symbol}:${startMs}:${endMs}`;
+  const key = `series:${symbol}:${startMs}:${endMs}:${interval}`;
   return _historicalCache.get(key, async () => {
     const rows = await fetchHistoricalRange(
       symbol,
       new Date(startMs),
       new Date(endMs),
+      interval,
     );
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error(`no historical data for ${symbol}`);
@@ -147,34 +152,54 @@ function dayBucket(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
 }
 
+/** Round ts down to the nearest `granularityMs` boundary (epoch-relative).
+ *  Lets intraday curves bucket sub-day points without collapsing to one
+ *  per day. (B15-2) */
+function intradayBucket(ts: number, granularityMs: number): string {
+  return String(Math.floor(ts / granularityMs) * granularityMs);
+}
+
 /**
  * Build a portfolio equity curve from per-symbol series.
  * Steps:
- *   1. Index each series by UTC-day key → close.
- *   2. Take the union of all days appearing in any series.
- *   3. For each day, look up each symbol's most-recent close (forward-fill).
- *      Skip the day until every symbol has at least one close.
+ *   1. Index each series by bucket key → close.
+ *   2. Take the union of all buckets appearing in any series.
+ *   3. For each bucket, forward-fill missing symbols.
  *   4. Compute portfolio value = Σ (shares_i × close_i) where
  *         shares_i = (initialValue × weight_i) / firstClose_i.
+ *
+ * Bucket granularity is daily by default (so different time-zones still
+ * align). For intraday backtest runs, pass a `bucketMs` (e.g. 5 * 60_000
+ * for 5-minute bars) so sub-day points don't collapse.
  */
 function buildPortfolioCurve(
   allocations: Allocation[],
   series: Record<string, DailyClose[]>,
+  bucketMs?: number,
 ): EquityPoint[] {
-  // Build per-symbol day → close map.
-  const byDay: Record<string, Map<string, number>> = {};
-  const allDaysSet = new Set<string>();
+  const keyFor = bucketMs
+    ? (ts: number) => intradayBucket(ts, bucketMs)
+    : dayBucket;
+  const tsFromKey = bucketMs
+    ? (k: string) => Number(k)
+    : (k: string) => parseDay(k).getTime();
+
+  // Build per-symbol bucket → close map.
+  const byBucket: Record<string, Map<string, number>> = {};
+  const allBucketsSet = new Set<string>();
   for (const a of allocations) {
     const map = new Map<string, number>();
     for (const p of series[a.symbol]) {
-      const k = dayBucket(p.ts);
-      // last-write-wins (sorted ascending → final intra-day close kept)
+      const k = keyFor(p.ts);
+      // last-write-wins (sorted ascending → final intra-bucket close kept)
       map.set(k, p.close);
-      allDaysSet.add(k);
+      allBucketsSet.add(k);
     }
-    byDay[a.symbol] = map;
+    byBucket[a.symbol] = map;
   }
-  const allDays = [...allDaysSet].sort();
+  const allDays = [...allBucketsSet].sort((a, b) =>
+    bucketMs ? Number(a) - Number(b) : a.localeCompare(b),
+  );
 
   // Forward-fill scan: for each day, ensure every symbol has a most-recent close.
   const lastSeen: Record<string, number | undefined> = {};
@@ -183,7 +208,7 @@ function buildPortfolioCurve(
 
   for (const day of allDays) {
     for (const a of allocations) {
-      const c = byDay[a.symbol].get(day);
+      const c = byBucket[a.symbol].get(day);
       if (c !== undefined) lastSeen[a.symbol] = c;
     }
     // Need a close for every symbol before we can mark the buy-in.
@@ -200,8 +225,7 @@ function buildPortfolioCurve(
       const shares = (INITIAL_VALUE * a.weight) / firstCloses[a.symbol];
       value += shares * (lastSeen[a.symbol] as number);
     }
-    // ts at UTC noon for the bucket day (stable, irrespective of source TZ).
-    curve.push({ ts: parseDay(day).getTime(), value });
+    curve.push({ ts: tsFromKey(day), value });
   }
 
   if (curve.length < MIN_BARS) {
@@ -290,12 +314,14 @@ export async function runBacktest(req: BacktestRequest): Promise<BacktestResult>
     throw new Error(`invalid date range: ${startDate} → ${endDate}`);
   }
 
+  const interval: HistInterval = req.interval ?? '1d';
+
   // Fetch all symbol histories in parallel. Any failure aborts the backtest.
   const symbols = allocations.map((a) => a.symbol);
   const seriesArr = await Promise.all(
     symbols.map(async (sym) => {
       try {
-        return await fetchSeries(sym, startMs, endMs);
+        return await fetchSeries(sym, startMs, endMs, interval);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         throw new Error(`failed to fetch ${sym}: ${msg}`);
@@ -305,7 +331,15 @@ export async function runBacktest(req: BacktestRequest): Promise<BacktestResult>
   const series: Record<string, DailyClose[]> = {};
   symbols.forEach((s, i) => { series[s] = seriesArr[i]; });
 
-  const equityCurve = buildPortfolioCurve(allocations, series);
+  // For intraday intervals (5m/15m/30m/60m), bucket on the same granularity
+  // so sub-day points don't collapse into one per day.
+  const intradayMs: Record<string, number> = {
+    '5m': 5 * 60_000, '15m': 15 * 60_000, '30m': 30 * 60_000,
+    '60m': 60 * 60_000, '1h': 60 * 60_000,
+  };
+  const bucketMs = intradayMs[interval];
+
+  const equityCurve = buildPortfolioCurve(allocations, series, bucketMs);
   const metrics     = metricsFromCurve(equityCurve);
 
   // Benchmark — same period, single-symbol SPY at 100% weight.
@@ -315,10 +349,11 @@ export async function runBacktest(req: BacktestRequest): Promise<BacktestResult>
     maxDrawdownPct: 0, sharpe: 0, volatilityPct: 0,
   };
   try {
-    const spy = await fetchSeries(BENCHMARK_SYMBOL, startMs, endMs);
+    const spy = await fetchSeries(BENCHMARK_SYMBOL, startMs, endMs, interval);
     benchmarkEquityCurve = buildPortfolioCurve(
       [{ symbol: BENCHMARK_SYMBOL, weight: 1 }],
       { [BENCHMARK_SYMBOL]: spy },
+      bucketMs,
     );
     benchmarkMetrics = metricsFromCurve(benchmarkEquityCurve);
   } catch (e) {

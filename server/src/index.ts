@@ -11,6 +11,8 @@ import { auth } from './routes/auth.js';
 import { googleRouter } from './routes/google.js';
 import { sim } from './routes/sim.js';
 import { geo } from './routes/geo.js';
+import { alerts } from './routes/alerts.js';
+import { startCronJobs } from './jobs/cron.js';
 import { requireAuth } from './auth.js';
 
 const app = express();
@@ -35,9 +37,11 @@ app.use('/api/settings',  settings);  // Settings page backend
 app.use('/api/google',    googleRouter); // B5-GS — OAuth + Sheets sync
 app.use('/api/sim',       sim);          // B8-SIM — strategy backtest + leaderboard
 app.use('/api/geo',       geo);          // B13-E6 — Gemini-grounded geo risk
+app.use('/api/alerts',    alerts);       // B15-3 — Slack webhook portfolio alerts
 
 // --- Start ---
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`InteliStock API listening on http://localhost:${port}`);
+  startCronJobs();
 });

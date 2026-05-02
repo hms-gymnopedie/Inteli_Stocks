@@ -14,6 +14,7 @@ import * as anthropic from '../providers/anthropic.js';
 import * as gemini    from '../providers/gemini.js';
 import * as fred      from '../providers/fred.js';
 import * as finnhub   from '../providers/finnhub.js';
+import * as slack     from '../providers/slack.js';
 import * as googleAuth from '../providers/google.js';
 
 export const settings = Router();
@@ -28,6 +29,7 @@ const MANAGED_KEYS = [
   'GEMINI_API_KEY',
   'FRED_API_KEY',
   'FINNHUB_API_KEY',
+  'SLACK_WEBHOOK_URL',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
 ] as const;
@@ -86,6 +88,7 @@ settings.get('/keys/status', (_req, res) => {
       GEMINI_API_KEY:       gemini.isConfigured(),
       FRED_API_KEY:         fred.isConfigured(),
       FINNHUB_API_KEY:      finnhub.isConfigured(),
+      SLACK_WEBHOOK_URL:    slack.isConfigured(),
       GOOGLE_CLIENT_ID:     Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
       GOOGLE_CLIENT_SECRET: Boolean(process.env.GOOGLE_CLIENT_SECRET?.trim()),
     },
@@ -137,6 +140,7 @@ settings.put('/keys', (req: Request, res: Response) => {
     gemini.reset();
     fred.reset();
     finnhub.reset();
+    slack.reset();
     googleAuth.reset();
 
     return res.json({
@@ -146,6 +150,7 @@ settings.put('/keys', (req: Request, res: Response) => {
         GEMINI_API_KEY:       gemini.isConfigured(),
         FRED_API_KEY:         fred.isConfigured(),
         FINNHUB_API_KEY:      finnhub.isConfigured(),
+        SLACK_WEBHOOK_URL:    slack.isConfigured(),
         GOOGLE_CLIENT_ID:     Boolean(process.env.GOOGLE_CLIENT_ID?.trim()),
         GOOGLE_CLIENT_SECRET: Boolean(process.env.GOOGLE_CLIENT_SECRET?.trim()),
       },

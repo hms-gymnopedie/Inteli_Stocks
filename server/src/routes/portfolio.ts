@@ -71,8 +71,7 @@ function rangeToStartDate(range: EquityRange): string {
   const today = new Date();
   const d = new Date(today);
   switch (range) {
-    // Daily-close backtest → '1D' degenerate; promote to 1W for a usable curve.
-    case '1D':
+    case '1D':  d.setDate(d.getDate() - 1);            break;
     case '1W':  d.setDate(d.getDate() - 7);            break;
     case '1M':  d.setMonth(d.getMonth() - 1);          break;
     case '3M':  d.setMonth(d.getMonth() - 3);          break;
@@ -83,6 +82,13 @@ function rangeToStartDate(range: EquityRange): string {
     case 'MAX': d.setFullYear(d.getFullYear() - 10);   break;
   }
   return d.toISOString().slice(0, 10);
+}
+
+/** Map equity-curve range → yahoo bar interval. (B15-2) */
+function rangeToInterval(range: EquityRange): '1d' | '5m' | '15m' | '30m' {
+  if (range === '1D') return '5m';
+  if (range === '1W') return '30m';
+  return '1d';
 }
 
 /**
@@ -216,6 +222,7 @@ async function realEquityCurve(
       allocations,
       startDate: rangeToStartDate(range),
       endDate:   new Date().toISOString().slice(0, 10),
+      interval:  rangeToInterval(range),
     });
     if (result.equityCurve.length === 0) return [];
     // Scale so the curve ENDS at the user's reported NAV — keeps the chart

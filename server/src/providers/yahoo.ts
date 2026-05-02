@@ -194,23 +194,59 @@ export async function fetchHistorical(symbol: string, range: Range) {
   }
 }
 
+/** Yahoo intraday intervals supported by chart() / historical(). */
+export type HistInterval = '1d' | '1m' | '2m' | '5m' | '15m' | '30m' | '60m' | '90m' | '1h';
+
 /**
  * Like fetchHistorical, but takes an explicit [period1, period2] window
  * instead of a categorical Range. Used by the backtest engine, which needs
  * data at the user's actual startDate — not "1Y ago from today". (B9-2)
+ *
+ * Optional `interval` enables intraday minute bars for short ranges:
+ *   '5m'   — last ~60 days of 5-minute bars (B15-2)
+ *   '15m'  — same window
+ *   '30m'  — same window
+ *   '1d'   — daily closes (default; works for any history length)
+ *
+ * Yahoo restricts intraday to recent data — caller must keep period1
+ * within yahoo's supported window per interval.
  */
 export async function fetchHistoricalRange(
   symbol: string,
   period1: Date,
   period2: Date,
+  interval: HistInterval = '1d',
 ) {
-  const key = `historical:${symbol}:${period1.getTime()}:${period2.getTime()}`;
+  const key = `historical:${symbol}:${period1.getTime()}:${period2.getTime()}:${interval}`;
 
   const fresh = peekTTL(_histCache, key);
   if (fresh) return fresh;
 
   try {
-    const rows = await yf.historical(symbol, { period1, period2, interval: '1d' });
+    // Daily/weekly/monthly intervals go through the typed historical()
+    // path. Intraday intervals (5m/15m/30m/60m) require chart() directly —
+    // yahoo-finance2's historical() schema rejects them even though it
+    // would otherwise remap to chart() at runtime. Map chart's response
+    // shape back to the historical() row type so callers don't care.
+    let rows;
+    if (interval === '1d') {
+      rows = await yf.historical(symbol, { period1, period2, interval: '1d' });
+    } else {
+      const ch = await yf.chart(symbol, { period1, period2, interval });
+      // chart().quotes shape: { date, open, high, low, close, volume, adjclose? }
+      // historical() shape:   { date, open, high, low, close, adjClose, volume }
+      rows = (ch.quotes ?? [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((q: any) => ({
+          date:     q.date instanceof Date ? q.date : new Date(q.date),
+          open:     q.open,
+          high:     q.high,
+          low:      q.low,
+          close:    q.close,
+          adjClose: q.adjclose ?? q.adjClose ?? q.close,
+          volume:   q.volume ?? 0,
+        }));
+    }
     pokeTTL(_histCache, key, rows);
     _lgHist.set(key, rows);
     return rows;

@@ -214,11 +214,21 @@ export async function getHotspots(): Promise<RiskHotspot[]> {
 }
 
 /**
- * Returns portfolio holdings affected by geo risk scenarios.
- * Mock-only — no real source. Reserved for multi-portfolio support in B5.
+ * Returns portfolio holdings affected by current geo hotspots, scored
+ * via /api/geo/affected (B15-1) — match each holding's ticker / sector /
+ * currency against active hotspot tickers + region keywords. Falls back
+ * to the inline mock when the backend errors.
  */
 export async function getAffected(_portfolioId: string): Promise<AffectedHolding[]> {
-  await delay();
+  try {
+    const r = await fetch('/api/geo/affected');
+    if (r.ok) {
+      const data = (await r.json()) as AffectedHolding[];
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch {
+    /* fall through */
+  }
   return MOCK_AFFECTED;
 }
 

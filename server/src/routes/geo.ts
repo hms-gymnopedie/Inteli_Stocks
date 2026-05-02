@@ -14,6 +14,9 @@
 
 import { Router, type Request, type Response } from 'express';
 import * as grounded from '../providers/gemini-grounded.js';
+import { localStore } from '../storage/local.js';
+import { fetchQuoteSummary } from '../providers/yahoo.js';
+import { TTLCache } from '../lib/cache.js';
 
 export const geo = Router();
 
@@ -155,6 +158,153 @@ Keep tickers comma-separated and uppercase. Output ONLY the JSON object.`,
   });
 
   res.json(result ?? FALLBACK_STATE);
+});
+
+// ─── /affected — Holdings exposed to current geo hotspots ──────────────────
+
+interface AffectedHolding {
+  symbol: string;
+  weight: string;
+  scenarioPnl: string;
+  direction: 1 | -1;
+}
+
+const _sectorCache = new TTLCache<string>(6 * 60 * 60 * 1000);
+
+async function lookupSector(symbol: string): Promise<string> {
+  return _sectorCache.get(symbol, async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const r = (await fetchQuoteSummary(symbol, ['assetProfile'])) as any;
+      return (typeof r?.assetProfile?.sector === 'string' && r.assetProfile.sector.trim())
+        ? r.assetProfile.sector
+        : '';
+    } catch {
+      return '';
+    }
+  });
+}
+
+function detectCurrency(symbol: string): string {
+  const u = symbol.toUpperCase();
+  if (u.endsWith('.KS') || u.endsWith('.KQ')) return 'KRW';
+  if (u.endsWith('.T'))                       return 'JPY';
+  if (u.endsWith('.HK'))                      return 'HKD';
+  if (u.endsWith('.L'))                       return 'GBP';
+  if (u.endsWith('.TO'))                      return 'CAD';
+  if (u.endsWith('.AX'))                      return 'AUD';
+  return 'USD';
+}
+
+/**
+ * Pulls the current geo state, then matches each user holding against
+ * hotspot tickers / sector keywords / region currency. Each match yields
+ * an AffectedHolding row whose scenarioPnl scales with hotspot level
+ * (low: ±1-3%, med: ±3-7%, high: ±7-15%) and direction defaults to -1
+ * (geopolitical events typically hurt exposed names).
+ *
+ * Returns top 6 by absolute weight × |scenario| so the panel surfaces the
+ * highest-conviction lines.
+ */
+geo.get('/affected', async (_req: Request, res: Response) => {
+  try {
+    const store = await localStore.read(null);
+    const usd = store.holdings.filter((h) => h.weight && parseFloat(h.weight) > 0);
+    if (usd.length === 0) { res.json([]); return; }
+
+    // Pull geo state from the same Gemini-grounded cache; if the cache
+    // miss / parse fail returned no hotspots, use FALLBACK_STATE so the
+    // affected panel still computes against current geopolitical themes.
+    const today = new Date().toISOString().slice(0, 10);
+    type Hotspot = { name: string; level: 'low' | 'med' | 'high'; tickers: string };
+    const state = await grounded.askJSON<{ hotspots: Hotspot[] }>({
+      cacheKey: `geo-state:${today}`,
+      cacheTtlMs: 6 * 60 * 60 * 1000,
+      prompt: 'no-op (cached)',
+    });
+    const hotspots: Hotspot[] = state?.hotspots && state.hotspots.length > 0
+      ? state.hotspots
+      : FALLBACK_STATE.hotspots;
+    if (hotspots.length === 0) { res.json([]); return; }
+
+    // Pull sector for each holding.
+    const enriched = await Promise.all(usd.map(async (h) => ({
+      symbol:   h.symbol,
+      weight:   h.weight,
+      currency: detectCurrency(h.symbol),
+      sector:   await lookupSector(h.symbol),
+    })));
+
+    // Score each holding × hotspot pair. The strongest match per holding
+    // becomes its row.
+    const out: AffectedHolding[] = [];
+    for (const h of enriched) {
+      let bestScore = 0;
+      let bestLevel: 'low' | 'med' | 'high' = 'low';
+      for (const hs of hotspots) {
+        const tickerHit = hs.tickers
+          .split(/[\s,]+/)
+          .map((t) => t.trim().toUpperCase())
+          .some((t) => t && h.symbol.toUpperCase().includes(t));
+        const sectorHit = (() => {
+          const s = h.sector.toLowerCase();
+          const n = hs.name.toLowerCase();
+          if (!s) return false;
+          // Cross-reference: hotspot name vs sector keyword.
+          if (s.includes('technology')   && /(semi|tech|tw|ai|chip)/.test(n)) return true;
+          if (s.includes('energy')       && /(red sea|iran|ukraine|crude|oil)/.test(n)) return true;
+          if (s.includes('financial')    && /trade tension/.test(n)) return true;
+          return false;
+        })();
+        const fxHit = (h.currency === 'KRW' && /korea|kr/i.test(hs.name))
+                   || (h.currency === 'EUR' && /(eu|ukraine)/i.test(hs.name));
+
+        let score = 0;
+        if (tickerHit) score += 3;
+        if (sectorHit) score += 2;
+        if (fxHit)     score += 1;
+
+        const levelWeight = hs.level === 'high' ? 3 : hs.level === 'med' ? 2 : 1;
+        const total = score * levelWeight;
+        if (total > bestScore) {
+          bestScore = total;
+          bestLevel = hs.level;
+        }
+      }
+      if (bestScore === 0) continue;
+      // Scenario P&L scales with level. Negative by default (geopolitical
+      // shock hurts exposed names); rare positive cases (e.g. energy on
+      // Mid-East tension) handled by future heuristics.
+      const magnitude = bestLevel === 'high' ? 8 + (bestScore % 5) * 1.4
+                      : bestLevel === 'med'  ? 4 + (bestScore % 3) * 1.0
+                      :                        2 + (bestScore % 2) * 0.6;
+      // Energy sector under Mid-East / Ukraine tension is typically positive.
+      const isEnergyUp = h.sector.toLowerCase().includes('energy');
+      const direction: 1 | -1 = isEnergyUp ? 1 : -1;
+      const sign = direction > 0 ? '+' : '−';
+      out.push({
+        symbol:      h.symbol,
+        weight:      h.weight,
+        scenarioPnl: `${sign}${magnitude.toFixed(1)}%`,
+        direction,
+      });
+    }
+
+    // Sort by |scenario| × parsed weight, take top 6.
+    const ranked = out
+      .map((a) => {
+        const w = parseFloat(a.weight) || 0;
+        const m = Math.abs(parseFloat(a.scenarioPnl)) || 0;
+        return { row: a, score: w * m };
+      })
+      .sort((x, y) => y.score - x.score)
+      .slice(0, 6)
+      .map((x) => x.row);
+    res.json(ranked);
+  } catch (err) {
+    console.error('[geo/affected]', err);
+    res.json([]);
+  }
 });
 
 geo.get('/region/:label', async (req: Request, res: Response) => {

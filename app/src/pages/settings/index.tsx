@@ -26,6 +26,7 @@ const KEY_DEFS: { id: string; label: string; help?: string }[] = [
   { id: 'GEMINI_API_KEY',       label: 'Google Gemini',       help: 'aistudio.google.com/app/apikey' },
   { id: 'FRED_API_KEY',         label: 'FRED (CPI)',          help: 'fred.stlouisfed.org/docs/api/api_key.html' },
   { id: 'FINNHUB_API_KEY',      label: 'Finnhub',             help: 'finnhub.io/register — economic calendar + option chain' },
+  { id: 'SLACK_WEBHOOK_URL',    label: 'Slack Webhook',       help: 'api.slack.com/apps → Incoming Webhooks → channel URL (B15-3 alerts)' },
   { id: 'GOOGLE_CLIENT_ID',     label: 'Google OAuth Client', help: 'console.cloud.google.com/apis/credentials → "OAuth 2.0 Client ID" (Web application)' },
   { id: 'GOOGLE_CLIENT_SECRET', label: 'Google OAuth Secret', help: 'pairs with the Client ID above' },
 ];
