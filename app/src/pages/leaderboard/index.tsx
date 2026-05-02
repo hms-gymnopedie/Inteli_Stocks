@@ -22,13 +22,23 @@ import { NewStrategyForm } from './NewStrategyForm';
 
 // ─── Color palette for the overlay chart ──────────────────────────────────────
 
+// Distinguishable palette derived from a categorical color scheme — each
+// pair has very different hue + lightness so adjacent strategies don't
+// blur together. Cycles past 10 strategies; rare in practice.
 const SERIES_COLORS = [
-  'var(--orange)',  // rank 1 — accent
-  '#6fcf8a',        // rank 2 — up green
-  '#7a93e8',        // rank 3 — neutral blue
+  'var(--orange)',  // 1 — accent
+  '#6fcf8a',        // 2 — green
+  '#7a93e8',        // 3 — blue
+  '#e25e5e',        // 4 — red
+  '#c178e8',        // 5 — purple
+  '#e8c66f',        // 6 — yellow
+  '#5fd8d8',        // 7 — cyan
+  '#e8866f',        // 8 — coral
+  '#aee86f',        // 9 — lime
+  '#e86fb8',        // 10 — pink
 ];
 
-const BENCHMARK_COLOR = 'var(--fg-3)';
+const BENCHMARK_COLOR = '#bdbdbd'; // light grey — visible against dark bg, distinct from any series color
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -65,6 +75,10 @@ export function Leaderboard() {
   const [error,      setError]      = useState<string | null>(null);
   const [showForm,   setShowForm]   = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Visibility set: strategy ids included in the overlay chart. Default-on
+  // for every strategy; user can toggle via checkbox in the legend.
+  const [visible, setVisible] = useState<Set<string>>(new Set());
+  const [showSpy, setShowSpy] = useState(true);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -72,6 +86,9 @@ export function Leaderboard() {
     try {
       const list = await listStrategies();
       setStrategies(list);
+      // Newly-loaded strategies default to visible so the overlay shows
+      // everything until the user opts out.
+      setVisible(new Set(list.map((s) => s.id)));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -84,16 +101,24 @@ export function Leaderboard() {
   const onSubmitBacktest = useCallback(
     async (req: BacktestRequest): Promise<Strategy> => {
       const created = await runBacktest(req);
-      // Optimistic insert + sort by totalReturn desc to match server order.
       setStrategies((prev) =>
         [...prev, created].sort(
           (a, b) => b.metrics.totalReturnPct - a.metrics.totalReturnPct,
         ),
       );
+      setVisible((prev) => new Set(prev).add(created.id));
       return created;
     },
     [],
   );
+
+  const toggleVisible = useCallback((id: string) => {
+    setVisible((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   const onDelete = useCallback(async (id: string) => {
     const prev = strategies;
@@ -108,19 +133,23 @@ export function Leaderboard() {
     }
   }, [strategies, expandedId]);
 
-  // Combined overlay: top-3 strategies + benchmark from rank-1 (any benchmark
-  // works — they're computed for the same period, but rank-1 is freshest).
+  // Combined overlay: every strategy by default, toggleable via checkboxes.
+  // Color index is locked to leaderboard rank so the legend swatch matches
+  // the row colour even if the user hides intermediate ranks.
   const overlaySeries: ChartSeries[] = useMemo(() => {
     if (strategies.length === 0) return [];
-    const top = strategies.slice(0, 3);
-    const out: ChartSeries[] = top.map((s, i) => ({
-      id:     s.id,
-      label:  s.name,
-      color:  SERIES_COLORS[i] ?? 'var(--fg-3)',
-      points: s.equityCurve,
-    }));
-    const bench = top[0].benchmarkEquityCurve;
-    if (bench && bench.length > 0) {
+    const out: ChartSeries[] = [];
+    strategies.forEach((s, i) => {
+      if (!visible.has(s.id)) return;
+      out.push({
+        id:     s.id,
+        label:  s.name,
+        color:  SERIES_COLORS[i % SERIES_COLORS.length],
+        points: s.equityCurve,
+      });
+    });
+    const bench = strategies[0]?.benchmarkEquityCurve;
+    if (showSpy && bench && bench.length > 0) {
       out.push({
         id:     'spy-benchmark',
         label:  'SPY (benchmark)',
@@ -130,7 +159,7 @@ export function Leaderboard() {
       });
     }
     return out;
-  }, [strategies]);
+  }, [strategies, visible, showSpy]);
 
   return (
     <div className="settings-page lb-page">
@@ -299,10 +328,51 @@ export function Leaderboard() {
       {strategies.length > 0 && (
         <div className="wf-panel lb-overlay-panel">
           <div className="lb-overlay-header">
-            <h2 className="lb-section-h">Top {Math.min(strategies.length, 3)} vs SPY</h2>
-            <span className="wf-mini">$100k initial · buy-and-hold</span>
+            <h2 className="lb-section-h">All strategies overlay</h2>
+            <span className="wf-mini">$100k initial · buy-and-hold · toggle below</span>
           </div>
-          <EquityCurveChart series={overlaySeries} height={220} />
+          <EquityCurveChart series={overlaySeries} height={260} hideLegend />
+          <div className="lb-overlay-toggles" role="group" aria-label="Toggle visibility">
+            {strategies.map((s, i) => {
+              const checked = visible.has(s.id);
+              const color = SERIES_COLORS[i % SERIES_COLORS.length];
+              return (
+                <label key={s.id} className="lb-overlay-toggle">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleVisible(s.id)}
+                  />
+                  <span
+                    className="lb-overlay-swatch"
+                    style={{ background: color }}
+                    aria-hidden
+                  />
+                  <span className="lb-overlay-label">{s.name}</span>
+                  <span
+                    className={'wf-mono ' + (s.metrics.totalReturnPct >= 0 ? 'up' : 'down')}
+                  >
+                    {fmtPct(s.metrics.totalReturnPct)}
+                  </span>
+                </label>
+              );
+            })}
+            {strategies[0]?.benchmarkEquityCurve.length > 0 && (
+              <label className="lb-overlay-toggle">
+                <input
+                  type="checkbox"
+                  checked={showSpy}
+                  onChange={() => setShowSpy((v) => !v)}
+                />
+                <span
+                  className="lb-overlay-swatch lb-overlay-swatch-dashed"
+                  style={{ background: BENCHMARK_COLOR }}
+                  aria-hidden
+                />
+                <span className="lb-overlay-label">SPY (benchmark)</span>
+              </label>
+            )}
+          </div>
         </div>
       )}
     </div>

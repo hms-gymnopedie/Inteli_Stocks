@@ -308,18 +308,35 @@ export function BarChart({
 
 export function SectorBars({
   items,
+  maxOverride,
+  onItemClick,
 }: {
   items: { name: string; v: number }[];
+  /** Use this max for bar scaling instead of Math.max(items). Lets a parent
+   *  render rows independently while keeping bars commensurable across all
+   *  slices in the dataset. */
+  maxOverride?: number;
+  /** When provided, each row becomes a button that fires this callback. */
+  onItemClick?: (item: { name: string; v: number }, idx: number) => void;
 }) {
-  const max = Math.max(...items.map((i) => Math.abs(i.v)));
+  const max = maxOverride ?? Math.max(...items.map((i) => Math.abs(i.v)));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {items.map((it, i) => {
-        const pct = (Math.abs(it.v) / max) * 50;
+        const pct = max > 0 ? (Math.abs(it.v) / max) * 50 : 0;
         const positive = it.v >= 0;
+        const Wrapper = onItemClick ? 'button' : 'div';
+        const wrapperProps = onItemClick
+          ? {
+              type: 'button' as const,
+              onClick: () => onItemClick(it, i),
+              title: `Drill into ${it.name}`,
+            }
+          : {};
         return (
-          <div
+          <Wrapper
             key={i}
+            {...wrapperProps}
             style={{
               display: 'grid',
               gridTemplateColumns: '90px 1fr 56px',
@@ -327,6 +344,15 @@ export function SectorBars({
               gap: 8,
               fontFamily: 'var(--font-mono)',
               fontSize: 10,
+              ...(onItemClick ? {
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                margin: 0,
+                textAlign: 'left' as const,
+                cursor: 'pointer',
+                color: 'inherit',
+              } : {}),
             }}
           >
             <div
@@ -379,7 +405,7 @@ export function SectorBars({
               {positive ? '+' : ''}
               {it.v.toFixed(2)}%
             </div>
-          </div>
+          </Wrapper>
         );
       })}
     </div>

@@ -30,6 +30,8 @@ interface Props {
   showAxis?: boolean;
   /** Caption shown above the chart. Optional. */
   caption?:  string;
+  /** Suppress the inline color legend below the chart. Default: false. */
+  hideLegend?: boolean;
 }
 
 const PAD_L = 8;
@@ -100,6 +102,7 @@ export function EquityCurveChart({
   height   = 180,
   showAxis = true,
   caption,
+  hideLegend = false,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   // Width is responsive — sized by the parent. We use a viewBox so the SVG
@@ -226,7 +229,7 @@ export function EquityCurveChart({
       </svg>
 
       {/* Legend */}
-      <div className="lb-chart-legend">
+      {!hideLegend && <div className="lb-chart-legend">
         {series.map((s) => {
           const ret = totalReturnPct(s.points);
           return (
@@ -248,7 +251,7 @@ export function EquityCurveChart({
             </div>
           );
         })}
-      </div>
+      </div>}
     </div>
   );
 }

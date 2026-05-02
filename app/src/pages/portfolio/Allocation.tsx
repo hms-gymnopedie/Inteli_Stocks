@@ -72,34 +72,10 @@ export function Allocation({ onSliceClick }: AllocationProps) {
         style={{ marginTop: 10, ...dimmed }}
         aria-busy={loading}
       >
-        {onSliceClick ? (
-          // Wrap each row in a clickable shell. The drill target is the
-          // top-most index.tsx, which decides what to do (e.g. scroll
-          // HoldingsTable into view filtered by sector).
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {items.map((slice, i) => (
-              <button
-                key={`${by}-${i}-${slice.name}`}
-                type="button"
-                onClick={() => onSliceClick(slice, by)}
-                title={`Drill into ${slice.name}`}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  padding: 0,
-                  margin: 0,
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  color: 'inherit',
-                }}
-              >
-                <SectorBars items={[slice]} />
-              </button>
-            ))}
-          </div>
-        ) : (
-          <SectorBars items={items} />
-        )}
+        <SectorBars
+          items={items}
+          onItemClick={onSliceClick ? (slice) => onSliceClick(slice as AllocationSlice, by) : undefined}
+        />
       </div>
     </div>
   );

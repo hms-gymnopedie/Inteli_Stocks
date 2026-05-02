@@ -5,6 +5,7 @@ import {
   deleteHolding,
   getHoldings,
 } from '../../data/portfolio';
+import { getProfile } from '../../data/security';
 import type { Holding } from '../../data/types';
 import { Spark } from '../../lib/primitives';
 import { useAsync } from '../../lib/useAsync';
@@ -17,15 +18,15 @@ interface SortState {
   dir: SortDir;
 }
 
-const COLUMNS: { key: SortKey | null; label: string }[] = [
-  { key: 'symbol', label: 'TICKER' },
-  { key: 'name',   label: 'NAME' },
-  { key: 'weight', label: 'WEIGHT' },
-  { key: 'price',  label: 'PRICE' },
-  { key: 'dayPct', label: 'DAY %' },
-  { key: 'plPct',  label: 'P/L %' },
-  { key: null,     label: '30D TREND' },
-  { key: 'risk',   label: 'RISK' },
+const COLUMNS: { key: SortKey | null; label: string; help?: string }[] = [
+  { key: 'symbol', label: 'TICKER', help: 'Exchange ticker symbol (e.g. NVDA, AAPL, 005930.KS for KOSPI)' },
+  { key: 'name',   label: 'NAME',   help: 'Company name' },
+  { key: 'weight', label: 'WEIGHT', help: 'Position size as % of total portfolio NAV' },
+  { key: 'price',  label: 'PRICE',  help: 'Latest market price in the security\'s native currency' },
+  { key: 'dayPct', label: 'DAY %',  help: 'Today\'s price change in percent (+ green / − red)' },
+  { key: 'plPct',  label: 'P/L %',  help: 'Total profit/loss since you acquired the position, in %' },
+  { key: null,     label: '30D TREND', help: '30-day price trend sparkline (visual only)' },
+  { key: 'risk',   label: 'RISK',   help: 'Risk score from 1 to 5: 1 = defensive (e.g. utilities, large-cap), 3 = market-typical, 5 = high-vol/leveraged/single-name concentration. Hover the cell for the same scale.' },
   { key: null,     label: '' },
 ];
 
@@ -197,6 +198,7 @@ export function HoldingsTable() {
               aria-sort={
                 active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined
               }
+              title={c.help}
               style={headerCellStyle(c.key)}
               onClick={() => handleSort(c.key)}
               onKeyDown={(e) => {
@@ -264,7 +266,11 @@ export function HoldingsTable() {
                   {r.plPct}
                 </span>
                 <Spark seed={r.sparkSeed} trend={0.4} />
-                <span className="tag" style={{ textAlign: 'center' }}>
+                <span
+                  className="tag"
+                  style={{ textAlign: 'center', cursor: 'help' }}
+                  title={`Risk ${r.risk}/5 — 1=defensive (utilities/large-cap blue chips), 2=below-market vol, 3=market-typical, 4=above-market vol/cyclical, 5=high-vol/leveraged/single-name concentration`}
+                >
                   {r.risk}/5
                 </span>
                 <button
@@ -326,6 +332,29 @@ function HoldingForm({
   const [dayPct, setDayPct] = useState('+0.00');
   const [plPct,  setPlPct]  = useState('+0%');
   const [risk,   setRisk]   = useState(2);
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupErr, setLookupErr] = useState<string | null>(null);
+
+  /** Pull profile for the entered ticker and pre-fill name/price/dayPct.
+   *  User-edited fields are not overwritten — we only fill blanks. */
+  async function lookupSymbol(): Promise<void> {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym) return;
+    setLookingUp(true);
+    setLookupErr(null);
+    try {
+      const p = await getProfile(sym);
+      // Always populate name (it's the main reason users hit blur).
+      setName(p.name);
+      // Fill price/dayPct only if untouched.
+      setPrice((cur) => (cur === '$0' || cur === '' ? p.priceFormatted : cur));
+      setDayPct((cur) => (cur === '+0.00' || cur === '' ? p.dayChangePct.replace('%', '') : cur));
+    } catch (e) {
+      setLookupErr(e instanceof Error ? `lookup failed: ${e.message}` : 'lookup failed');
+    } finally {
+      setLookingUp(false);
+    }
+  }
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -364,8 +393,29 @@ function HoldingForm({
         alignItems: 'center',
       }}
     >
-      <input style={cell} value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="NVDA"   required />
-      <input style={cell} value={name}   onChange={(e) => setName(e.target.value)}   placeholder="NVIDIA Corp" required />
+      <input
+        style={cell}
+        value={symbol}
+        onChange={(e) => setSymbol(e.target.value)}
+        onBlur={() => void lookupSymbol()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            (e.currentTarget as HTMLInputElement).blur();
+          }
+        }}
+        placeholder="NVDA"
+        required
+        title="Type ticker and Tab/Enter to auto-fill name + price"
+      />
+      <input
+        style={cell}
+        value={lookingUp ? 'looking up…' : name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="auto-filled from ticker"
+        required
+        readOnly={lookingUp}
+      />
       <input style={cell} value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="12.4%" />
       <input style={cell} value={price}  onChange={(e) => setPrice(e.target.value)}  placeholder="$924" />
       <input style={cell} value={dayPct} onChange={(e) => setDayPct(e.target.value)} placeholder="+3.17" />
@@ -378,9 +428,16 @@ function HoldingForm({
         onChange={(e) => setRisk(Number(e.target.value))}
       />
       <div className="row gap-1">
-        <button type="submit" className="tag" style={{ background: 'var(--orange)', color: '#000', border: 0, cursor: 'pointer' }} disabled={busy}>OK</button>
+        <button type="submit" className="tag" style={{ background: 'var(--orange)', color: '#000', border: 0, cursor: 'pointer' }} disabled={busy || lookingUp}>OK</button>
         <button type="button" className="tag" style={{ background: 'transparent', cursor: 'pointer' }} onClick={onCancel}>×</button>
       </div>
+      {lookupErr && (
+        <div
+          style={{ gridColumn: '1 / -1', fontSize: 10, color: 'var(--down)', fontFamily: 'var(--font-mono)' }}
+        >
+          {lookupErr}
+        </div>
+      )}
     </form>
   );
 }

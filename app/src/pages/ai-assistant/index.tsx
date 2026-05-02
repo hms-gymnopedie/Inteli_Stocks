@@ -11,7 +11,7 @@
  * tablist (roving tabindex, Arrow/Home/End keyboard navigation).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   clearAIHistory,
@@ -21,7 +21,7 @@ import {
   streamSignals,
   getVerdict,
 } from '../../data/ai';
-import type { Area, HistoryEntry } from '../../data/aiHistoryTypes';
+import type { AIHistory, Area, HistoryEntry } from '../../data/aiHistoryTypes';
 import type {
   AIInsight,
   AIMeta,
@@ -31,6 +31,7 @@ import type {
   HedgeProposal,
 } from '../../data/types';
 import { AITokenFooter } from '../../lib/AITokenFooter';
+import { estimateCost, formatUSD } from '../../lib/aiPricing';
 import { formatTime } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
 
@@ -52,6 +53,7 @@ export function AIAssistant() {
 
   const [active, setActive] = useState<Area>('signals');
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [allHistory, setAllHistory] = useState<AIHistory | null>(null);
   const [loading, setLoading] = useState(false);
   const [reload, setReload] = useState(0);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -67,6 +69,18 @@ export function AIAssistant() {
     });
     return () => { cancelled = true; };
   }, [active, reload]);
+
+  // Pull the entire history file once per `reload` bump for the side panel
+  // aggregate stats. Cheap — single file read on the server, capped at 200
+  // entries (50 × 4 areas).
+  useEffect(() => {
+    let cancelled = false;
+    getAIHistory().then((h) => {
+      if (cancelled) return;
+      setAllHistory(h);
+    });
+    return () => { cancelled = true; };
+  }, [reload]);
 
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
     let next = idx;
@@ -147,13 +161,27 @@ export function AIAssistant() {
   }, [entries]);
 
   return (
+    <div className="ai-assistant-layout">
     <div className="ai-assistant-page">
-      <header className="settings-header">
-        <h1 className="settings-title">AI Assistant — History</h1>
-        <p className="settings-sub">
-          Every AI generation is persisted server-side (last 50 per area).
-          Browse, inspect token usage, or re-run any prior call.
-        </p>
+      <header className="settings-header ai-assistant-header">
+        <div>
+          <h1 className="settings-title">AI Assistant — History</h1>
+          <p className="settings-sub">
+            Every AI generation is persisted server-side (last 50 per area).
+            Browse, inspect token usage, or re-run any prior call.
+          </p>
+        </div>
+        {/* Global action — distinct level from per-tab Generate. */}
+        <button
+          type="button"
+          className="ai-trigger-btn"
+          onClick={() => void onGenerateAll()}
+          disabled={generating != null}
+          title="Generate fresh batch for all four areas in parallel"
+          style={{ alignSelf: 'flex-start' }}
+        >
+          {generating === 'all' ? 'Generating all…' : '⚡ Generate All'}
+        </button>
       </header>
 
       <div
@@ -182,33 +210,27 @@ export function AIAssistant() {
           );
         })}
         <span className="ai-tab-help">{AREAS.find((a) => a.id === active)?.help}</span>
-        <button
-          type="button"
-          className="ai-trigger-btn"
-          onClick={() => void onGenerateActive()}
-          disabled={generating != null}
-          title={`Generate fresh ${active}`}
-        >
-          {generating === active ? 'Generating…' : `+ Generate ${active}`}
-        </button>
-        <button
-          type="button"
-          className="ai-trigger-btn ghost"
-          onClick={() => void onGenerateAll()}
-          disabled={generating != null}
-          title="Generate fresh batch for all four areas in parallel"
-        >
-          {generating === 'all' ? 'Generating all…' : '⚡ Generate All'}
-        </button>
-        <button
-          type="button"
-          className="ai-trigger-btn ghost ai-tab-clear"
-          onClick={onClear}
-          disabled={!entries.length || loading}
-          title={`Clear ${active} history`}
-        >
-          Clear
-        </button>
+        {/* Per-tab actions — tied to the active area. */}
+        <div className="ai-tab-actions">
+          <button
+            type="button"
+            className="ai-trigger-btn"
+            onClick={() => void onGenerateActive()}
+            disabled={generating != null}
+            title={`Generate fresh ${active}`}
+          >
+            {generating === active ? 'Generating…' : `+ Generate ${active}`}
+          </button>
+          <button
+            type="button"
+            className="ai-trigger-btn ghost"
+            onClick={onClear}
+            disabled={!entries.length || loading}
+            title={`Clear ${active} history`}
+          >
+            Clear
+          </button>
+        </div>
       </div>
       {genErr && (
         <div className="wf-mini" style={{ color: 'var(--down)', padding: '4px 14px' }}>
@@ -249,7 +271,184 @@ export function AIAssistant() {
         )}
       </div>
     </div>
+    <UsagePanel history={allHistory} />
+    </div>
   );
+}
+
+// ─── Usage panel (right sidebar) ────────────────────────────────────────────
+
+interface UsagePanelProps { history: AIHistory | null }
+
+function UsagePanel({ history }: UsagePanelProps) {
+  const stats = useMemo(() => computeStats(history), [history]);
+
+  return (
+    <aside className="ai-usage-panel" aria-label="AI usage summary">
+      <div className="wf-label">AI Usage</div>
+      <div className="wf-mini muted-2" style={{ marginTop: 2, marginBottom: 14 }}>
+        Lifetime — across all areas
+      </div>
+
+      <div className="ai-usage-stats">
+        <div className="ai-usage-stat">
+          <div className="wf-mini muted-2">Calls</div>
+          <div className="wf-num" style={{ fontSize: 22 }}>{stats.totalCalls.toLocaleString()}</div>
+        </div>
+        <div className="ai-usage-stat">
+          <div className="wf-mini muted-2">Tokens</div>
+          <div className="wf-num" style={{ fontSize: 22 }}>{fmtTokensShort(stats.totalTokens)}</div>
+        </div>
+        <div className="ai-usage-stat">
+          <div className="wf-mini muted-2">Est. cost</div>
+          <div className="wf-num" style={{ fontSize: 22, color: 'var(--orange)' }}>
+            {stats.totalCost > 0 ? formatUSD(stats.totalCost) : '$0'}
+          </div>
+        </div>
+      </div>
+
+      <div className="wf-label" style={{ marginTop: 16, marginBottom: 6 }}>By area</div>
+      <div className="ai-usage-by-area">
+        {(['signals', 'insights', 'verdicts', 'hedges'] as const).map((a) => {
+          const s = stats.byArea[a];
+          const pct = stats.totalCalls > 0 ? (s.calls / stats.totalCalls) * 100 : 0;
+          return (
+            <div key={a} className="ai-usage-area-row">
+              <span className="ai-usage-area-name">{a}</span>
+              <span className="ai-usage-area-bar-wrap" aria-hidden>
+                <span
+                  className="ai-usage-area-bar"
+                  style={{ width: `${pct}%` }}
+                />
+              </span>
+              <span className="wf-mono ai-usage-area-num">{s.calls}</span>
+              <span className="wf-mono muted ai-usage-area-num">{fmtTokensShort(s.tokens)}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="wf-label" style={{ marginTop: 16, marginBottom: 6 }}>
+        Tokens / call · last {stats.recent.length}
+      </div>
+      <UsageBars points={stats.recent} />
+      {stats.recent.length === 0 && (
+        <div className="ai-empty" style={{ padding: 8 }}>No calls yet.</div>
+      )}
+
+      {stats.lastCallAt && (
+        <div className="wf-mini muted-2" style={{ marginTop: 12 }}>
+          Last call {new Date(stats.lastCallAt).toLocaleString()}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+interface RecentPoint { ts: number; tokens: number; area: Area }
+
+interface UsageStats {
+  totalCalls:  number;
+  totalTokens: number;
+  totalCost:   number;
+  byArea: Record<Area, { calls: number; tokens: number; cost: number }>;
+  recent:      RecentPoint[];
+  lastCallAt:  number | null;
+}
+
+function computeStats(h: AIHistory | null): UsageStats {
+  const empty: UsageStats = {
+    totalCalls: 0, totalTokens: 0, totalCost: 0,
+    byArea: {
+      signals:  { calls: 0, tokens: 0, cost: 0 },
+      insights: { calls: 0, tokens: 0, cost: 0 },
+      verdicts: { calls: 0, tokens: 0, cost: 0 },
+      hedges:   { calls: 0, tokens: 0, cost: 0 },
+    },
+    recent: [], lastCallAt: null,
+  };
+  if (!h) return empty;
+  const out = { ...empty, byArea: { ...empty.byArea } };
+
+  const all: { entry: HistoryEntry; area: Area }[] = [];
+  (['signals', 'insights', 'verdicts', 'hedges'] as const).forEach((area) => {
+    for (const e of h[area] ?? []) all.push({ entry: e, area });
+  });
+
+  for (const { entry, area } of all) {
+    const u = entry.usage;
+    const tokens = (u?.totalTokens ?? ((u?.inputTokens ?? 0) + (u?.outputTokens ?? 0)));
+    const cost = estimateCost({
+      provider: entry.provider as AIMeta['provider'],
+      model:    entry.model,
+      usage:    u,
+    }) ?? 0;
+    out.totalCalls  += 1;
+    out.totalTokens += tokens;
+    out.totalCost   += cost;
+    out.byArea[area].calls  += 1;
+    out.byArea[area].tokens += tokens;
+    out.byArea[area].cost   += cost;
+    if (out.lastCallAt === null || entry.createdAt > out.lastCallAt) {
+      out.lastCallAt = entry.createdAt;
+    }
+  }
+
+  // Recent: last 30 calls across all areas, sorted ascending by ts.
+  const recent = all
+    .map(({ entry, area }) => ({
+      ts:     entry.createdAt,
+      tokens: entry.usage?.totalTokens ?? ((entry.usage?.inputTokens ?? 0) + (entry.usage?.outputTokens ?? 0)),
+      area,
+    }))
+    .sort((a, b) => a.ts - b.ts)
+    .slice(-30);
+  out.recent = recent;
+
+  return out;
+}
+
+const AREA_COLORS: Record<Area, string> = {
+  signals:  'var(--orange)',
+  insights: '#6fcf8a',
+  verdicts: '#7a93e8',
+  hedges:   '#c178e8',
+};
+
+function UsageBars({ points }: { points: RecentPoint[] }) {
+  if (points.length === 0) return <div className="ai-usage-bars" />;
+  const maxT = Math.max(...points.map((p) => p.tokens), 1);
+  const W = 240;
+  const H = 60;
+  const bw = points.length > 0 ? Math.max(2, (W - (points.length - 1) * 2) / points.length) : 0;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="ai-usage-bars">
+      {points.map((p, i) => {
+        const x = i * (bw + 2);
+        const h = (p.tokens / maxT) * (H - 2);
+        const y = H - h;
+        return (
+          <rect
+            key={i}
+            x={x} y={y}
+            width={bw} height={Math.max(h, 1)}
+            fill={AREA_COLORS[p.area]}
+            opacity={0.85}
+          >
+            <title>
+              {new Date(p.ts).toLocaleString()} · {p.area} · {p.tokens.toLocaleString()} tokens
+            </title>
+          </rect>
+        );
+      })}
+    </svg>
+  );
+}
+
+function fmtTokensShort(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
+  return n.toLocaleString();
 }
 
 // ─── Per-entry card ─────────────────────────────────────────────────────────
