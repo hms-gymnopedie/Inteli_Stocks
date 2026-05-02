@@ -12,6 +12,7 @@ export function HeroChart() {
   const { values } = useTweaks();
   const showGrid = values.showGrid;
   const [range, setRange] = useState<Range>('1W');
+  const [symbol] = useState<string>(SYMBOL);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   // Arrow-key navigation per WAI-ARIA Authoring Practices for tabs:
@@ -30,13 +31,15 @@ export function HeroChart() {
     tabRefs.current[next]?.focus();
   };
 
-  // Drive the chart from the data layer. Header values stay byte-identical to
-  // the prototype loaded state — the mock OHLC generator is synthetic and not
-  // pre-aggregated for SPX. When B2-MD swaps in real data, header derivation
-  // can move into this hook too.
+  // Drive the chart from the data layer. Both `symbol` and `range` are in the
+  // deps so changing either triggers `getIntraday(symbol, range)` re-fetch
+  // (B8-OV-CHART). Header values stay byte-identical to the prototype loaded
+  // state — the mock OHLC generator is synthetic and not pre-aggregated for
+  // SPX. When B2-MD swaps in real data, header derivation can move into this
+  // hook too.
   const { data: bars, loading } = useAsync<OHLC[]>(
-    () => getIntraday(SYMBOL, range),
-    [range],
+    () => getIntraday(symbol, range),
+    [symbol, range],
   );
 
   return (
@@ -92,7 +95,9 @@ export function HeroChart() {
       <div
         style={{
           marginTop: 10,
-          opacity: loading && !bars ? 0.5 : 1,
+          // Skeleton-like dim on first load (no bars yet) AND a softer dim
+          // during background refetches when range/symbol changes.
+          opacity: loading ? (bars ? 0.7 : 0.5) : 1,
           transition: 'opacity 120ms linear',
         }}
         aria-busy={loading}
