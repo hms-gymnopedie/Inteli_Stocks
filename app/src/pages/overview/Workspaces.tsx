@@ -1,5 +1,4 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { KeyboardEvent } from 'react';
 
 interface WorkspaceItem {
   /** Display label. */
@@ -46,39 +45,40 @@ export function Workspaces() {
           // that "/overview" doesn't also light up while on "/overview/foo".
           const isActive = pathname === w.to;
 
-          const onActivate = () => navigate(w.to);
-          const onKey = (e: KeyboardEvent<HTMLLIElement>) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              onActivate();
-            }
-          };
-
+          // Native <button> handles Enter/Space activation + tab focus
+          // automatically. We render it inside an <li> so the list
+          // structure stays intact for screen readers.
           return (
             <li
               key={w.label}
-              role="link"
-              tabIndex={0}
-              aria-current={isActive ? 'page' : undefined}
-              onClick={onActivate}
-              onKeyDown={onKey}
-              className={'tab' + (isActive ? ' active' : '')}
-              style={{
-                padding: '6px 8px',
-                borderRadius: 4,
-                background: isActive ? 'var(--panel-2)' : 'transparent',
-                color: isActive ? 'var(--fg)' : 'var(--fg-3)',
-                marginBottom: 1,
-                display: 'flex',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-              }}
-              title={`Go to ${w.to}`}
+              style={{ marginBottom: 1 }}
             >
-              <span>{w.label}</span>
-              {w.badge !== undefined && (
-                <span className="accent">{w.badge}</span>
-              )}
+              <button
+                type="button"
+                onClick={() => navigate(w.to)}
+                aria-current={isActive ? 'page' : undefined}
+                className={'tab' + (isActive ? ' active' : '')}
+                style={{
+                  all: 'unset',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '6px 8px',
+                  borderRadius: 4,
+                  background: isActive ? 'var(--panel-2)' : 'transparent',
+                  color: isActive ? 'var(--fg)' : 'var(--fg-3)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                }}
+                title={`Go to ${w.to}`}
+              >
+                <span>{w.label}</span>
+                {w.badge !== undefined && (
+                  <span className="accent">{w.badge}</span>
+                )}
+              </button>
             </li>
           );
         })}
