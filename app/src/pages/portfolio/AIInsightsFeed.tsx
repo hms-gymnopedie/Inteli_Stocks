@@ -21,15 +21,10 @@ const CATEGORIES: { id: AICategory | 'ALL'; label: string }[] = [
  * provider for insight cards tailored to your portfolio. No auto-fetch.
  */
 export function AIInsightsFeed() {
-  const { values } = useTweaks();
-  const tz = values.timezone || 'America/New_York';
-  const tzAbbrev =
-    tz === 'America/New_York' ? 'NY'
-    : tz === 'Asia/Seoul'      ? 'KST'
-    : tz === 'Europe/London'   ? 'LDN'
-    : 'UTC';
-
-  // Hydrate from server history on mount.
+  // Hydrate from server history on mount, then mount the inner component
+  // (which holds the on-demand stream) with that initial state. Splitting
+  // these into two components keeps the Rules of Hooks clean — no hooks
+  // are called conditionally.
   const [hydration, setHydration] = useState<{
     items: AIInsight[];
     meta:  AIMeta | null;
@@ -55,6 +50,31 @@ export function AIInsightsFeed() {
     return () => { cancelled = true; };
   }, []);
 
+  if (!hydrated) {
+    return (
+      <aside style={{ borderLeft: '1px solid var(--hairline)', padding: 14 }}>
+        <div className="wf-label">AI Insights · On-demand</div>
+        <div className="ai-empty" style={{ marginTop: 12 }}>Loading history…</div>
+      </aside>
+    );
+  }
+
+  return <AIInsightsInner hydration={hydration} />;
+}
+
+interface AIInsightsInnerProps {
+  hydration: { items: AIInsight[]; meta: AIMeta | null; at: number } | null;
+}
+
+function AIInsightsInner({ hydration }: AIInsightsInnerProps) {
+  const { values } = useTweaks();
+  const tz = values.timezone || 'America/New_York';
+  const tzAbbrev =
+    tz === 'America/New_York' ? 'NY'
+    : tz === 'Asia/Seoul'      ? 'KST'
+    : tz === 'Europe/London'   ? 'LDN'
+    : 'UTC';
+
   const initial = useMemo(
     () => hydration
       ? { items: hydration.items, meta: hydration.meta, receivedAt: hydration.at }
@@ -64,20 +84,8 @@ export function AIInsightsFeed() {
 
   const stream = useOnDemandStream<AIInsight, AIMeta>(
     (onMeta) => streamInsights('default', onMeta),
-    // useOnDemandStream's initial state is read once on first mount; re-keying
-    // the parent on `hydrated` (below) forces a fresh hook instance.
     initial,
   );
-
-  if (!hydrated) {
-    // Brief skeleton header so we don't flash an empty "Idle" badge.
-    return (
-      <aside style={{ borderLeft: '1px solid var(--hairline)', padding: 14 }}>
-        <div className="wf-label">AI Insights · On-demand</div>
-        <div className="ai-empty" style={{ marginTop: 12 }}>Loading history…</div>
-      </aside>
-    );
-  }
 
   const [filter, setFilter] = useState<AICategory | 'ALL'>('ALL');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
