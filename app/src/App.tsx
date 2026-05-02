@@ -10,13 +10,17 @@ import { GeoRisk } from './pages/geo';
 import { Detail } from './pages/detail';
 import { Settings } from './pages/settings';
 import { Login } from './pages/auth/Login';
+import { AIAssistant } from './pages/ai-assistant';
+import { Leaderboard } from './pages/leaderboard';
 
 const NAV = [
-  { to: '/overview',  label: 'Overview'  },
-  { to: '/portfolio', label: 'Portfolio' },
-  { to: '/geo',       label: 'Geo Risk'  },
-  { to: '/detail',    label: 'Security'  },
-  { to: '/settings',  label: 'Settings'  },
+  { to: '/overview',     label: 'Overview'     },
+  { to: '/portfolio',    label: 'Portfolio'    },
+  { to: '/geo',          label: 'Geo Risk'     },
+  { to: '/detail',       label: 'Security'     },
+  { to: '/leaderboard',  label: 'Leaderboard'  },
+  { to: '/ai-assistant', label: 'AI Assistant' },
+  { to: '/settings',     label: 'Settings'     },
 ];
 
 // ─── Auth chip (shown in topbar when signed in via Supabase) ──────────────────
@@ -162,6 +166,8 @@ export function App() {
               <Route path="/geo"             element={<RequireAuth><GeoRisk /></RequireAuth>} />
               <Route path="/detail"          element={<RequireAuth><Detail /></RequireAuth>} />
               <Route path="/detail/:symbol"  element={<RequireAuth><Detail /></RequireAuth>} />
+              <Route path="/leaderboard"     element={<RequireAuth><Leaderboard /></RequireAuth>} />
+              <Route path="/ai-assistant"    element={<RequireAuth><AIAssistant /></RequireAuth>} />
               <Route path="/settings"        element={<RequireAuth><Settings /></RequireAuth>} />
               <Route path="*"                element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
             </Routes>
