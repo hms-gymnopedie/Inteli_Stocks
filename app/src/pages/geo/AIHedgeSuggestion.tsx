@@ -46,9 +46,11 @@ export function AIHedgeSuggestion() {
     [seed],
   );
 
+  // Force-remount when hydration arrives so useState lazy init reads the
+  // freshly seeded `initial` (B9-4).
   return hydrated
-    ? <Inner initial={initial} tz={tz} tzAbbrev={tzAbbrev} />
-    : <Inner initial={undefined} tz={tz} tzAbbrev={tzAbbrev} loadingHistory />;
+    ? <Inner key="hydrated" initial={initial} tz={tz} tzAbbrev={tzAbbrev} />
+    : <Inner key="loading"  initial={undefined} tz={tz} tzAbbrev={tzAbbrev} loadingHistory />;
 }
 
 interface InnerProps {

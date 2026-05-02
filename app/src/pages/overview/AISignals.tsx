@@ -52,10 +52,13 @@ export function AISignals() {
   }, []);
 
   // Re-instantiate the on-demand stream with hydrated initial state once
-  // history loads (or with no initial if the area is empty).
+  // history loads. The `key` prop forces React to discard the loading-state
+  // hook instance and create a fresh one with seeded `initial` — without it
+  // useState's lazy init only runs on the very first mount, so seeding
+  // never takes effect. (B9-4)
   return hydrated
-    ? <AISignalsInner hydration={hydration} tz={tz} tzAbbrev={tzAbbrev} />
-    : <AISignalsInner hydration={null} tz={tz} tzAbbrev={tzAbbrev} loadingHistory />;
+    ? <AISignalsInner key="hydrated" hydration={hydration} tz={tz} tzAbbrev={tzAbbrev} />
+    : <AISignalsInner key="loading"  hydration={null}      tz={tz} tzAbbrev={tzAbbrev} loadingHistory />;
 }
 
 interface InnerProps {

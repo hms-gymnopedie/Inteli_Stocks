@@ -65,10 +65,18 @@ export function GeoRisk() {
               flexDirection: 'column',
               gap: 8,
               width: 240,
+              // Wrapper itself doesn't catch clicks so the map underneath can
+              // receive zoom/pan gestures; only the cards re-enable pointer
+              // events for their own content. (B9-6)
+              pointerEvents: 'none',
             }}
           >
-            <LiveAlertCard />
-            <LayerToggles />
+            <div style={{ pointerEvents: 'auto' }}>
+              <LiveAlertCard />
+            </div>
+            <div style={{ pointerEvents: 'auto' }}>
+              <LayerToggles />
+            </div>
           </div>
 
           <RiskLegend />

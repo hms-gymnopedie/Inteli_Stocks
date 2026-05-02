@@ -64,9 +64,11 @@ export function AIInvestmentGuide({ symbol = 'NVDA' }: AIInvestmentGuideProps) {
     [seed],
   );
 
+  // Force-remount when hydration arrives so useState lazy init reads the
+  // freshly seeded `initial` (B9-4).
   return hydrated
-    ? <Inner symbol={symbol} initial={initial} tz={tz} tzAbbrev={tzAbbrev} />
-    : <Inner symbol={symbol} initial={undefined} tz={tz} tzAbbrev={tzAbbrev} loadingHistory />;
+    ? <Inner key={`hydrated-${upper}`} symbol={symbol} initial={initial} tz={tz} tzAbbrev={tzAbbrev} />
+    : <Inner key={`loading-${upper}`}  symbol={symbol} initial={undefined} tz={tz} tzAbbrev={tzAbbrev} loadingHistory />;
 }
 
 interface InnerProps {

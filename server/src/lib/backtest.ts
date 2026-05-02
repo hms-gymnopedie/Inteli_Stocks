@@ -19,7 +19,7 @@
  * date range here).
  */
 
-import { fetchHistorical } from '../providers/yahoo.js';
+import { fetchHistoricalRange } from '../providers/yahoo.js';
 import { TTLCache } from './cache.js';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -79,21 +79,6 @@ function parseDay(s: string): Date {
   return new Date(`${s}T12:00:00Z`);
 }
 
-/**
- * Pick the widest yahoo range bucket that covers [startDate, endDate].
- * The yahoo wrapper expects a categorical Range, not arbitrary period1.
- */
-type YahooRange = '1M' | '3M' | '6M' | 'YTD' | '1Y' | '5Y' | 'MAX';
-function rangeForSpan(startMs: number, endMs: number): YahooRange {
-  const days = (endMs - startMs) / (24 * 3600_000);
-  if (days <= 31)   return '1M';
-  if (days <= 92)   return '3M';
-  if (days <= 183)  return '6M';
-  if (days <= 366)  return '1Y';
-  if (days <= 5*366) return '5Y';
-  return 'MAX';
-}
-
 /** Validate + auto-normalize allocation weights. */
 function normalizeAllocations(input: Allocation[]): Allocation[] {
   if (!Array.isArray(input) || input.length === 0) {
@@ -128,8 +113,11 @@ async function fetchSeries(
 ): Promise<DailyClose[]> {
   const key = `series:${symbol}:${startMs}:${endMs}`;
   return _historicalCache.get(key, async () => {
-    const range = rangeForSpan(startMs, endMs);
-    const rows  = await fetchHistorical(symbol, range);
+    const rows = await fetchHistoricalRange(
+      symbol,
+      new Date(startMs),
+      new Date(endMs),
+    );
     if (!Array.isArray(rows) || rows.length === 0) {
       throw new Error(`no historical data for ${symbol}`);
     }
@@ -140,7 +128,9 @@ async function fetchSeries(
                   : typeof r.adjClose === 'number' ? r.adjClose
                   : NaN;
       if (!Number.isFinite(close) || !Number.isFinite(ts)) continue;
-      if (ts < startMs - 24*3600_000) continue; // tolerate one weekend lookback
+      // Yahoo includes a few bars outside the requested window — tolerate one
+      // weekend on either side.
+      if (ts < startMs - 24*3600_000) continue;
       if (ts > endMs   + 24*3600_000) continue;
       series.push({ ts, close });
     }

@@ -23,7 +23,7 @@ test.describe('Smoke — every route renders without console errors', () => {
     const errors = trackConsoleErrors(page);
     await page.goto('/');
     await expect(page.getByText('InteliStock', { exact: true })).toBeVisible();
-    for (const label of ['Overview', 'Portfolio', 'Geo Risk', 'Security']) {
+    for (const label of ['Overview', 'Portfolio', 'Geo Risk', 'Detail']) {
       await expect(
         page.getByRole('link', { name: label, exact: true }),
       ).toBeVisible();

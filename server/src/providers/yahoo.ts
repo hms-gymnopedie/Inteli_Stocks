@@ -173,8 +173,12 @@ export async function fetchHistorical(symbol: string, range: Range) {
   if (fresh) return fresh;
 
   try {
+    // yahoo-finance2 v3 deprecated `historical()` and remaps to `chart()`,
+    // which validates `period2` strictly — passing undefined now fails the
+    // schema. Always set both ends of the window. (B9-2)
     const rows = await yf.historical(symbol, {
       period1:  rangeToPeriod1(range),
+      period2:  new Date(),
       interval: rangeToInterval(range),
     });
     pokeTTL(_histCache, key, rows);
@@ -184,6 +188,36 @@ export async function fetchHistorical(symbol: string, range: Range) {
     const stale = _lgHist.get(key);
     if (stale !== undefined) {
       console.warn(`[B2-MD2] fetchHistorical: yahoo error, serving stale last-good for key="${key}"`);
+      return stale;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Like fetchHistorical, but takes an explicit [period1, period2] window
+ * instead of a categorical Range. Used by the backtest engine, which needs
+ * data at the user's actual startDate — not "1Y ago from today". (B9-2)
+ */
+export async function fetchHistoricalRange(
+  symbol: string,
+  period1: Date,
+  period2: Date,
+) {
+  const key = `historical:${symbol}:${period1.getTime()}:${period2.getTime()}`;
+
+  const fresh = peekTTL(_histCache, key);
+  if (fresh) return fresh;
+
+  try {
+    const rows = await yf.historical(symbol, { period1, period2, interval: '1d' });
+    pokeTTL(_histCache, key, rows);
+    _lgHist.set(key, rows);
+    return rows;
+  } catch (err) {
+    const stale = _lgHist.get(key);
+    if (stale !== undefined) {
+      console.warn(`[B9-2] fetchHistoricalRange: yahoo error, serving stale last-good for key="${key}"`);
       return stale;
     }
     throw err;

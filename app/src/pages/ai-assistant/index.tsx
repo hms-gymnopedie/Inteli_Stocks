@@ -93,6 +93,59 @@ export function AIAssistant() {
     setTimeout(() => setReload((n) => n + 1), 800);
   }, []);
 
+  // ── Per-area + Global generators (B9-3) ────────────────────────────────────
+
+  const [generating, setGenerating] = useState<Area | 'all' | null>(null);
+  const [genErr, setGenErr] = useState<string | null>(null);
+
+  /** Drain whichever generator matches `area` so the server-side history append fires. */
+  async function generateOne(area: Area): Promise<void> {
+    if (area === 'signals') {
+      for await (const _ of streamSignals()) { void _; }
+    } else if (area === 'insights') {
+      for await (const _ of streamInsights('default')) { void _; }
+    } else if (area === 'verdicts') {
+      // Use the most recent symbol from history if available, else NVDA.
+      const recent = entries.find((e) => e.symbol)?.symbol ?? 'NVDA';
+      await getVerdict(recent);
+    } else {
+      const recent = entries.find((e) => e.exposure)?.exposure
+        ?? 'broad equity exposure with US tech tilt';
+      await proposeHedge(recent);
+    }
+  }
+
+  const onGenerateActive = useCallback(async () => {
+    setGenerating(active);
+    setGenErr(null);
+    try {
+      await generateOne(active);
+      // Server append happens fire-and-forget; give it a beat then reload.
+      setTimeout(() => setReload((n) => n + 1), 400);
+    } catch (e) {
+      setGenErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerating(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, entries]);
+
+  const onGenerateAll = useCallback(async () => {
+    setGenerating('all');
+    setGenErr(null);
+    try {
+      await Promise.all(
+        (['signals', 'insights', 'verdicts', 'hedges'] as const).map((a) => generateOne(a)),
+      );
+      setTimeout(() => setReload((n) => n + 1), 600);
+    } catch (e) {
+      setGenErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerating(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
   return (
     <div className="ai-assistant-page">
       <header className="settings-header">
@@ -131,6 +184,24 @@ export function AIAssistant() {
         <span className="ai-tab-help">{AREAS.find((a) => a.id === active)?.help}</span>
         <button
           type="button"
+          className="ai-trigger-btn"
+          onClick={() => void onGenerateActive()}
+          disabled={generating != null}
+          title={`Generate fresh ${active}`}
+        >
+          {generating === active ? 'Generating…' : `+ Generate ${active}`}
+        </button>
+        <button
+          type="button"
+          className="ai-trigger-btn ghost"
+          onClick={() => void onGenerateAll()}
+          disabled={generating != null}
+          title="Generate fresh batch for all four areas in parallel"
+        >
+          {generating === 'all' ? 'Generating all…' : '⚡ Generate All'}
+        </button>
+        <button
+          type="button"
           className="ai-trigger-btn ghost ai-tab-clear"
           onClick={onClear}
           disabled={!entries.length || loading}
@@ -139,6 +210,11 @@ export function AIAssistant() {
           Clear
         </button>
       </div>
+      {genErr && (
+        <div className="wf-mini" style={{ color: 'var(--down)', padding: '4px 14px' }}>
+          {genErr}
+        </div>
+      )}
 
       <div
         role="tabpanel"

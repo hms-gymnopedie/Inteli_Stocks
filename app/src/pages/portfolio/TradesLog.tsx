@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 
-import { getTrades } from '../../data/portfolio';
+import { addTrade, deleteTrade, getTrades } from '../../data/portfolio';
 import type { Trade } from '../../data/types';
 import { useAsync } from '../../lib/useAsync';
 
@@ -22,9 +22,10 @@ const COLUMNS: { label: string; align?: 'right' | 'center' }[] = [
   { label: 'QTY', align: 'right' },
   { label: 'PRICE', align: 'right' },
   { label: 'CCY', align: 'center' },
+  { label: '' },
 ];
 
-const GRID_TEMPLATE = '90px 90px 60px 80px 90px 50px';
+const GRID_TEMPLATE = '90px 90px 60px 80px 90px 50px 28px';
 
 const SKELETON_ROWS = 5;
 
@@ -45,7 +46,33 @@ function formatPrice(p: number, ccy: string): string {
 export function TradesLog() {
   const [period, setPeriod] = useState<Period>('30D');
   const [symbolFilter, setSymbolFilter] = useState('');
-  const { data, loading } = useAsync(() => getTrades(), []);
+  const [showAdd, setShowAdd] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const { data, loading } = useAsync(() => getTrades(), [refreshNonce]);
+
+  async function onDelete(idx: number, label: string) {
+    if (!window.confirm(`Remove trade: ${label}?`)) return;
+    setBusy(true); setErr(null);
+    try {
+      await deleteTrade(idx);
+      setRefreshNonce((n) => n + 1);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(false); }
+  }
+
+  async function onCreate(t: Trade) {
+    setBusy(true); setErr(null);
+    try {
+      await addTrade(t);
+      setShowAdd(false);
+      setRefreshNonce((n) => n + 1);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(false); }
+  }
 
   const filtered = useMemo<Trade[]>(() => {
     if (!data) return [];
@@ -105,8 +132,29 @@ export function TradesLog() {
               width: 140,
             }}
           />
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            disabled={busy}
+            className="tag"
+            style={{ background: 'transparent', cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            + ADD TRADE
+          </button>
         </div>
       </div>
+      {err && (
+        <div className="wf-mini" style={{ color: 'var(--down)', padding: '0 12px 6px' }}>
+          {err}
+        </div>
+      )}
+      {showAdd && (
+        <TradeForm
+          onSubmit={onCreate}
+          onCancel={() => setShowAdd(false)}
+          busy={busy}
+        />
+      )}
 
       <div
         className="dense-row"
@@ -162,6 +210,28 @@ export function TradesLog() {
                 <span className="muted-2" style={cellAlign('center')}>
                   {t.currency}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => void onDelete(
+                    // Compute original-array index (filter may differ from data order).
+                    data.indexOf(t),
+                    `${t.date} ${t.side} ${t.quantity} ${t.symbol}`,
+                  )}
+                  disabled={busy}
+                  aria-label="Remove trade"
+                  title="Remove trade"
+                  style={{
+                    background: 'transparent',
+                    border: 0,
+                    color: 'var(--fg-4)',
+                    cursor: 'pointer',
+                    padding: 0,
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 12,
+                  }}
+                >
+                  ✕
+                </button>
               </div>
             ))
           : Array.from({ length: SKELETON_ROWS }).map((_, i) => (
@@ -179,9 +249,80 @@ export function TradesLog() {
                 <span style={cellAlign('right')}>—</span>
                 <span style={cellAlign('right')}>—</span>
                 <span style={cellAlign('center')}>—</span>
+                <span />
               </div>
             ))}
       </div>
     </div>
+  );
+}
+
+// ─── Add-trade inline form ──────────────────────────────────────────────────
+
+function TradeForm({
+  onSubmit, onCancel, busy,
+}: { onSubmit: (t: Trade) => void; onCancel: () => void; busy: boolean }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [date,     setDate]     = useState(today);
+  const [symbol,   setSymbol]   = useState('');
+  const [side,     setSide]     = useState<'BUY' | 'SELL'>('BUY');
+  const [quantity, setQuantity] = useState('1');
+  const [price,    setPrice]    = useState('');
+  const [currency, setCurrency] = useState('USD');
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({
+      date,
+      symbol: symbol.trim().toUpperCase(),
+      side,
+      quantity: Number(quantity) || 0,
+      price:    Number(price) || 0,
+      currency,
+    });
+  };
+
+  const cell: React.CSSProperties = {
+    background: 'var(--panel-2)',
+    border: '1px solid var(--hairline)',
+    borderRadius: 4,
+    padding: '4px 8px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 11,
+    color: 'var(--fg)',
+    outline: 'none',
+    minWidth: 0,
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: GRID_TEMPLATE,
+        gap: 6,
+        padding: '8px 12px',
+        borderTop: '1px solid var(--hairline)',
+        borderBottom: '1px solid var(--hairline)',
+        background: 'var(--panel-2)',
+        alignItems: 'center',
+      }}
+    >
+      <input style={cell} type="date"    value={date}     onChange={(e) => setDate(e.target.value)}     required />
+      <input style={cell}                value={symbol}   onChange={(e) => setSymbol(e.target.value)}   placeholder="NVDA" required />
+      <select style={cell}              value={side}     onChange={(e) => setSide(e.target.value as 'BUY' | 'SELL')}>
+        <option value="BUY">BUY</option>
+        <option value="SELL">SELL</option>
+      </select>
+      <input style={cell} type="number" min="0" step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+      <input style={cell} type="number" min="0" step="any" value={price}    onChange={(e) => setPrice(e.target.value)} placeholder="900" required />
+      <select style={cell}              value={currency} onChange={(e) => setCurrency(e.target.value)}>
+        <option>USD</option><option>KRW</option><option>EUR</option><option>JPY</option>
+      </select>
+      <div className="row gap-1">
+        <button type="submit" className="tag" style={{ background: 'var(--orange)', color: '#000', border: 0, cursor: 'pointer' }} disabled={busy}>OK</button>
+        <button type="button" className="tag" style={{ background: 'transparent', cursor: 'pointer' }} onClick={onCancel}>×</button>
+      </div>
+    </form>
   );
 }

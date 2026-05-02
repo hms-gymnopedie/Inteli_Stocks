@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { getIntraday } from '../../data/market';
 import type { OHLC, Range } from '../../data/types';
 import { CandleChart, LineChart } from '../../lib/primitives';
@@ -11,14 +11,11 @@ const SYMBOL = '^GSPC';
 export function HeroChart() {
   const { values } = useTweaks();
   const showGrid = values.showGrid;
-  const [range, setRange] = useState<Range>('1W');
+  const [range, setRange] = useState<Range>('1M');
   const [symbol] = useState<string>(SYMBOL);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  // Arrow-key navigation per WAI-ARIA Authoring Practices for tabs:
-  // Left/Right move + activate the previous/next tab and focus it,
-  // Home/End jump to first/last. Tab itself enters/exits the tablist
-  // (only the selected tab is reachable via Tab, others are tabindex=-1).
+  // WAI-ARIA tablist keyboard nav (Left/Right move + activate, Home/End jump).
   const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
     let next = idx;
     if (e.key === 'ArrowRight') next = (idx + 1) % RANGES.length;
@@ -31,22 +28,47 @@ export function HeroChart() {
     tabRefs.current[next]?.focus();
   };
 
-  // Drive the chart from the data layer. Both `symbol` and `range` are in the
-  // deps so changing either triggers `getIntraday(symbol, range)` re-fetch
-  // (B8-OV-CHART). Header values stay byte-identical to the prototype loaded
-  // state — the mock OHLC generator is synthetic and not pre-aggregated for
-  // SPX. When B2-MD swaps in real data, header derivation can move into this
-  // hook too.
   const { data: bars, loading } = useAsync<OHLC[]>(
     () => getIntraday(symbol, range),
     [symbol, range],
   );
 
+  // Drive header KPIs and chart series from the live bars (B9-1).
+  const header = useMemo(() => {
+    if (!bars || bars.length === 0) return null;
+    const first = bars[0];
+    const last  = bars[bars.length - 1];
+    const change    = last.close - first.close;
+    const changePct = (change / first.close) * 100;
+    const sumVol    = bars.reduce((acc, b) => acc + (b.volume ?? 0), 0);
+    return {
+      price:     last.close,
+      change,
+      changePct,
+      open:      first.open,
+      high:      bars.reduce((acc, b) => Math.max(acc, b.high), -Infinity),
+      low:       bars.reduce((acc, b) => Math.min(acc, b.low),   Infinity),
+      close:     last.close,
+      volumeSum: sumVol,
+      lastTs:    last.ts,
+    };
+  }, [bars]);
+
+  const closes = useMemo(
+    () => (bars ? bars.map((b) => b.close) : null),
+    [bars],
+  );
+
+  const upColor = header && header.change >= 0 ? 'var(--up)' : 'var(--down)';
+  const sign = header
+    ? header.change >= 0 ? '+' : '−'
+    : '+';
+
   return (
     <div className="wf-panel" style={{ padding: 14 }}>
       <div className="row between center">
         <div>
-          <div className="wf-label">Primary · S&amp;P 500 · Intraday</div>
+          <div className="wf-label">Primary · S&amp;P 500 · {range}</div>
           <div
             style={{
               display: 'flex',
@@ -56,12 +78,20 @@ export function HeroChart() {
             }}
           >
             <div className="wf-num" style={{ fontSize: 32 }}>
-              5,247.<span className="muted">18</span>
+              {header
+                ? header.price.toLocaleString('en-US', { maximumFractionDigits: 2 })
+                : '—'}
             </div>
-            <div className="up wf-mono" style={{ fontSize: 13 }}>
-              +22.04 (+0.42%)
+            <div className="wf-mono" style={{ fontSize: 13, color: upColor }}>
+              {header
+                ? `${sign}${Math.abs(header.change).toFixed(2)} (${sign}${Math.abs(header.changePct).toFixed(2)}%)`
+                : '—'}
             </div>
-            <div className="muted wf-mini">VOL 2.41B</div>
+            <div className="muted wf-mini">
+              {header && header.volumeSum > 0
+                ? `VOL ${formatVolumeShort(header.volumeSum)}`
+                : ''}
+            </div>
           </div>
         </div>
         <div className="row gap-1" role="tablist" aria-label="Time range">
@@ -95,41 +125,52 @@ export function HeroChart() {
       <div
         style={{
           marginTop: 10,
-          // Skeleton-like dim on first load (no bars yet) AND a softer dim
-          // during background refetches when range/symbol changes.
           opacity: loading ? (bars ? 0.7 : 0.5) : 1,
           transition: 'opacity 120ms linear',
         }}
         aria-busy={loading}
       >
         {values.chartStyle === 'candle' ? (
-          <CandleChart w={800} h={180} count={62} seed={3} />
+          <CandleChart w={800} h={180} count={Math.min(bars?.length ?? 62, 120)} seed={3} />
         ) : (
           <LineChart
             w={800}
             h={180}
-            seed={3}
-            trend={0.6}
+            data={closes}
             grid={showGrid}
-            dashedTarget
-            accent
             area={values.chartStyle === 'area'}
-            accentRange={[0.62, 0.78]}
+            stroke={header && header.change >= 0 ? 'var(--up)' : 'var(--down)'}
             strokeWidth={1.4}
           />
         )}
       </div>
       <div className="row between" style={{ marginTop: 8 }}>
-        <div className="wf-mini">
-          09:30 · 11:00 · 13:00 · 15:00 · 16:00
+        <div className="wf-mini muted">
+          {header
+            ? new Date(header.lastTs).toLocaleString(undefined, {
+                month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              })
+            : ''}
         </div>
         <div className="row gap-3 wf-mini">
-          <span>O 5,225.14</span>
-          <span>H 5,251.02</span>
-          <span>L 5,219.88</span>
-          <span>C 5,247.18</span>
+          {header ? (
+            <>
+              <span>O {header.open.toFixed(2)}</span>
+              <span>H {header.high.toFixed(2)}</span>
+              <span>L {header.low.toFixed(2)}</span>
+              <span>C {header.close.toFixed(2)}</span>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
   );
+}
+
+function formatVolumeShort(v: number): string {
+  if (v >= 1e12) return `${(v / 1e12).toFixed(2)}T`;
+  if (v >= 1e9)  return `${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6)  return `${(v / 1e6).toFixed(2)}M`;
+  return v.toLocaleString();
 }

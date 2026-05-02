@@ -17,7 +17,7 @@ const NAV = [
   { to: '/overview',     label: 'Overview'     },
   { to: '/portfolio',    label: 'Portfolio'    },
   { to: '/geo',          label: 'Geo Risk'     },
-  { to: '/detail',       label: 'Security'     },
+  { to: '/detail',       label: 'Detail'       },
   { to: '/leaderboard',  label: 'Leaderboard'  },
   { to: '/ai-assistant', label: 'AI Assistant' },
   { to: '/settings',     label: 'Settings'     },

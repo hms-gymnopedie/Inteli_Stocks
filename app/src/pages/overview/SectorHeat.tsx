@@ -71,7 +71,12 @@ export function SectorHeat() {
   return (
     <div className="wf-panel" style={{ padding: 12 }}>
       <div className="row between">
-        <div className="wf-label">S&amp;P 500 · Sector heatmap</div>
+        <div>
+          <div className="wf-label">S&amp;P 500 · Sector heatmap</div>
+          <div className="wf-mini muted-2" style={{ marginTop: 2 }}>
+            top 5 by market cap per sector · day % change
+          </div>
+        </div>
         <div className="wf-mini">SESSION</div>
       </div>
       <div

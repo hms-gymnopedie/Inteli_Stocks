@@ -1,5 +1,56 @@
+import { useState } from 'react';
 import { getProfile } from '../../data/security';
 import { useAsync } from '../../lib/useAsync';
+
+/**
+ * Logo placeholder — uses a free third-party CDN for the real bitmap, with a
+ * graceful fallback to a 2-char monogram derived from the ticker. The CDN
+ * (parqet.com) hosts pre-cropped logos keyed by exchange-prefixed symbol;
+ * we strip Yahoo suffixes (.KS / .KQ) since the CDN keys are bare tickers.
+ */
+function SymbolLogo({ symbol, name }: { symbol: string; name?: string }) {
+  const [errored, setErrored] = useState(false);
+  const bare = symbol.split('.')[0].toUpperCase();
+  const monogram = (name ?? symbol).replace(/[^A-Za-z0-9]/g, '').slice(0, 2).toUpperCase() || bare.slice(0, 2);
+  const src = `https://assets.parqet.com/logos/symbol/${encodeURIComponent(bare)}?format=png`;
+
+  if (errored) {
+    return (
+      <div
+        aria-label={`${symbol} logo placeholder`}
+        style={{
+          width: 44, height: 44,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--panel-2)',
+          borderRadius: 6,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          fontWeight: 500,
+          color: 'var(--orange)',
+          letterSpacing: '0.04em',
+        }}
+      >
+        {monogram}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={`${symbol} logo`}
+      width={44}
+      height={44}
+      onError={() => setErrored(true)}
+      style={{
+        width: 44, height: 44,
+        objectFit: 'contain',
+        borderRadius: 6,
+        background: 'var(--panel-2)',
+      }}
+    />
+  );
+}
 
 interface HeaderProps {
   symbol: string;
@@ -46,21 +97,7 @@ export function Header({ symbol }: HeaderProps) {
     >
       <div style={dimmed}>
         <div className="row gap-3 center">
-          <div
-            className="wf-dashed"
-            style={{
-              width: 44,
-              height: 44,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--fg-3)',
-            }}
-          >
-            LOGO
-          </div>
+          <SymbolLogo symbol={profile?.symbol ?? symbol} name={profile?.name} />
           <div>
             <div className="row gap-2 center">
               <h2

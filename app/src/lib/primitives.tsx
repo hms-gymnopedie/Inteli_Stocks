@@ -65,6 +65,12 @@ interface LineChartProps {
   dashedTarget?: boolean;
   label?: string;
   accentRange?: [number, number] | null;
+  /**
+   * Optional real time-series. When provided, replaces the synthetic
+   * generator and renders the actual values normalized into the [0,h] box.
+   * Pass an array of numbers (e.g. closes from OHLC bars).
+   */
+  data?: number[] | null;
 }
 
 export function LineChart({
@@ -81,11 +87,21 @@ export function LineChart({
   dashedTarget = false,
   label,
   accentRange = null,
+  data = null,
 }: LineChartProps) {
-  const pts = useMemo(
-    () => generateSeries({ w, h, seed, trend, vol }),
-    [w, h, seed, trend, vol],
-  );
+  const pts = useMemo(() => {
+    if (data && data.length >= 2) {
+      const lo = Math.min(...data);
+      const hi = Math.max(...data);
+      const span = hi - lo || 1;
+      const stepX = w / (data.length - 1);
+      // Map y so that high → top (small y) and low → bottom (large y).
+      return data.map(
+        (v, i) => [i * stepX, h - ((v - lo) / span) * h] as [number, number],
+      );
+    }
+    return generateSeries({ w, h, seed, trend, vol });
+  }, [data, w, h, seed, trend, vol]);
   const accentPts = useMemo(
     () =>
       accent
