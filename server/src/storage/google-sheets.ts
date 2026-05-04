@@ -171,6 +171,10 @@ async function ensureTabs(
  * Append data rows to a tab without overwriting anything that's already there.
  * If the tab is empty, the header row is inserted first; otherwise data is
  * appended at the next free row below the existing table.
+ *
+ * Robustness: also re-writes the header when row 1 is non-empty but doesn't
+ * match the expected header (older syncs may have accumulated rows without
+ * a header — this fills the gap on the next sync).
  */
 async function appendTab(
   sheets: sheets_v4.Sheets,
@@ -181,20 +185,59 @@ async function appendTab(
 ): Promise<void> {
   if (dataRows.length === 0) return;
 
-  // Check whether A1 already has content.
+  // Read the full first row, not just A1 — older syncs may have populated
+  // multiple columns without a matching header row.
   const probe = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${tabName}!A1:A1`,
+    range: `${tabName}!1:1`,
   });
-  const isEmpty = !probe.data.values || probe.data.values.length === 0;
+  const firstRow = (probe.data.values?.[0] ?? []) as string[];
+  const isEmpty = firstRow.length === 0;
+  const headerMatches = !isEmpty
+    && firstRow.length === header.length
+    && firstRow[0] === header[0];
 
-  const values = isEmpty ? [header, ...dataRows] : dataRows;
+  if (isEmpty || !headerMatches) {
+    // Insert header in row 1 (overwrites whatever was there) so column
+    // names show up. Data is then appended below.
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${tabName}!A1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [header] },
+    });
+  }
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,
     range: `${tabName}!A1`,
     valueInputOption: 'RAW',
     insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: dataRows },
+  });
+}
+
+/**
+ * Wipe all data in a tab and write fresh `header + dataRows` starting at A1.
+ * Used by mirrorToSheetsFresh (B16-2) when the user wants column headers
+ * to appear and is OK with losing accumulated history.
+ */
+async function rewriteTab(
+  sheets: sheets_v4.Sheets,
+  spreadsheetId: string,
+  tabName: string,
+  header: Row,
+  dataRows: Row[],
+): Promise<void> {
+  await sheets.spreadsheets.values.clear({
+    spreadsheetId,
+    range: `${tabName}!A:Z`,
+  });
+  const values = dataRows.length > 0 ? [header, ...dataRows] : [header];
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `${tabName}!A1`,
+    valueInputOption: 'RAW',
     requestBody: { values },
   });
 }
@@ -252,6 +295,48 @@ export async function mirrorToSheets(
     const detail = err instanceof Error ? err.message : String(err);
     writeConfig({ lastSyncError: detail });
     console.error('[google-sheets] mirror failed:', detail);
+    return { ok: false, reason: 'error', detail };
+  }
+}
+
+/**
+ * Like `mirrorToSheets` but clears each portfolio tab first and writes a
+ * fresh header + single data block. Use this when the user wants column
+ * names to appear cleanly and is OK with losing accumulated history.
+ * (B16-2)
+ *
+ * AI tabs are NOT wiped — they hold an unbounded log that the user
+ * probably doesn't want to lose. Only the 8 portfolio tabs reset.
+ */
+export async function mirrorToSheetsFresh(
+  store: PortfolioStore,
+): Promise<MirrorResult | MirrorSkipped> {
+  if (!google.isConfigured()) return { ok: false, reason: 'not_configured' };
+  if (!google.isConnected())  return { ok: false, reason: 'not_connected' };
+  const cfg = readConfig();
+  if (!cfg.spreadsheetId) return { ok: false, reason: 'no_spreadsheet' };
+
+  try {
+    const sheets = google.sheetsClient();
+    await ensureTabs(sheets, cfg.spreadsheetId);
+
+    const at = new Date().toISOString();
+    await rewriteTab(sheets, cfg.spreadsheetId, TAB_SUMMARY,   SUMMARY_HEADER,    summaryRows(store.summary, at));
+    await rewriteTab(sheets, cfg.spreadsheetId, TAB_HOLDINGS,  HOLDINGS_HEADER,   holdingsRows(store.holdings, at));
+    await rewriteTab(sheets, cfg.spreadsheetId, TAB_ALLOC_SEC, ALLOCATION_HEADER, allocationRows(store.allocation.sector, at));
+    await rewriteTab(sheets, cfg.spreadsheetId, TAB_ALLOC_REG, ALLOCATION_HEADER, allocationRows(store.allocation.region, at));
+    await rewriteTab(sheets, cfg.spreadsheetId, TAB_ALLOC_AST, ALLOCATION_HEADER, allocationRows(store.allocation.asset, at));
+    await rewriteTab(sheets, cfg.spreadsheetId, TAB_TRADES,    TRADES_HEADER,     tradesRows(store.trades, at));
+    await rewriteTab(sheets, cfg.spreadsheetId, TAB_RISK,      RISK_HEADER,       riskRows(store.riskFactors, at));
+    await rewriteTab(sheets, cfg.spreadsheetId, TAB_WATCH_KR,  WATCHLIST_HEADER,  watchlistRows(store.watchlist.KR, at));
+
+    const syncedAt = Date.now();
+    writeConfig({ lastSyncAt: syncedAt, lastSyncError: null });
+    return { ok: true, syncedAt, spreadsheetId: cfg.spreadsheetId };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    writeConfig({ lastSyncError: detail });
+    console.error('[google-sheets] fresh mirror failed:', detail);
     return { ok: false, reason: 'error', detail };
   }
 }

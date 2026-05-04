@@ -642,6 +642,27 @@ function GoogleSyncSection() {
     }
   }
 
+  async function rewrite(): Promise<void> {
+    if (!window.confirm(
+      'This will WIPE all data in the 8 portfolio tabs of your spreadsheet ' +
+      '(Summary / Holdings / Allocation / Trades / etc.) and rewrite them with ' +
+      'fresh column headers + the current snapshot. AI tabs are preserved. Continue?',
+    )) return;
+    setBusy('rewrite');
+    setMsg(null);
+    try {
+      const r = await fetch('/api/google/rewrite', { method: 'POST' });
+      const j = (await r.json()) as { ok: boolean; reason?: string; detail?: string };
+      if (!j.ok) throw new Error(j.detail ?? j.reason ?? 'unknown');
+      await refresh();
+      setMsg('Sheets reset · headers + fresh snapshot written.');
+    } catch (e) {
+      setMsg(`Rewrite failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <section className="settings-section settings-section--wide">
       <h2 className="settings-section-h">Google Drive Sync</h2>
@@ -723,6 +744,15 @@ function GoogleSyncSection() {
                       disabled={busy != null}
                     >
                       {busy === 'sync' ? 'Syncing…' : 'Sync now'}
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-btn-link"
+                      onClick={() => void rewrite()}
+                      disabled={busy != null}
+                      title="Wipe portfolio tabs + rewrite with column headers"
+                    >
+                      {busy === 'rewrite' ? 'Rewriting…' : 'Reset (clear + headers)'}
                     </button>
                   </>
                 ) : (

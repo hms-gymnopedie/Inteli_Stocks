@@ -28,6 +28,7 @@ import type {
 import { runBacktest, type EquityPoint as BTEquityPoint } from '../lib/backtest.js';
 import { volatilityScore } from '../lib/risk.js';
 import { computeRiskFactors } from '../lib/factors.js';
+import { fetchQuotes } from '../providers/yahoo.js';
 
 export const portfolio = Router();
 
@@ -111,15 +112,29 @@ async function recomputeSummary(
 ): Promise<typeof store.summary> {
   const seed = store.summary;
 
-  // ── 1. Day change: weighted sum of holdings dayPct ─────────────────────────
+  // ── 1. Day change: live yahoo dayPct per holding, weighted by stored weight.
+  //      Falls back to the holding's static dayPct string when yahoo errors.
   let dayPctSum = 0;
   let weightSum = 0;
+  // Fetch quotes once for all holdings so we don't N+1 yahoo for every read.
+  const symbols = store.holdings.map((h) => h.symbol);
+  const quotes = symbols.length > 0
+    ? await fetchQuotes(symbols).catch(() => [] as Awaited<ReturnType<typeof fetchQuotes>>)
+    : [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const qMap = new Map<string, any>(quotes.map((q: any) => [q.symbol, q]));
   for (const h of store.holdings) {
     const w = parseWeight(h.weight);
-    const m = /^\s*([+\-−]?\s*[\d.]+)/.exec(h.dayPct);
-    if (!m) continue;
-    const pct = Number(m[1].replace('−', '-').replace(/\s+/g, ''));
-    if (!Number.isFinite(pct)) continue;
+    let pct: number | null = null;
+    const q = qMap.get(h.symbol);
+    if (q && typeof q.regularMarketChangePercent === 'number') {
+      pct = q.regularMarketChangePercent;
+    } else {
+      // Last-resort: parse the seed string.
+      const m = /^\s*([+\-−]?\s*[\d.]+)/.exec(h.dayPct);
+      if (m) pct = Number(m[1].replace('−', '-').replace(/\s+/g, ''));
+    }
+    if (pct == null || !Number.isFinite(pct)) continue;
     dayPctSum += w * pct;
     weightSum += w;
   }
@@ -278,18 +293,93 @@ portfolio.get('/holdings', (req: Request, res: Response): void => {
   const store  = storeFor(req);
   const userId = req.user?.id ?? null;
   void store.read(userId).then(async (s) => {
-    // Replace seed risk with real volatility-based score (B12-2). Compute
-    // in parallel; fall back to the seeded value when the fetch fails so
-    // the UI never goes blank.
+    // Refresh price + dayPct + risk + plPct from real yahoo quotes (B16-1)
+    // — without this the dashboard mirrors static seed values forever even
+    // though the dashboard advertises "live".
+    //
+    // Fetched in one batched yahoo call for efficiency; per-symbol quote
+    // map matched by symbol. Each enrichment is wrapped in try/catch so
+    // a single bad ticker doesn't blank the entire panel.
+    const symbols = s.holdings.map((h) => h.symbol);
+    const quotes = symbols.length > 0
+      ? await fetchQuotes(symbols).catch(() => [] as Awaited<ReturnType<typeof fetchQuotes>>)
+      : [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const qMap = new Map<string, any>(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      quotes.map((q: any) => [q.symbol, q]),
+    );
+
+    // Avg cost basis per symbol from trades log (BUY quantity-weighted).
+    const costBasis = new Map<string, number>();
+    for (const t of s.trades) {
+      if (t.side !== 'BUY') continue;
+      const cur = costBasis.get(t.symbol);
+      const totalQty = (cur ? cur * 1 : 0); // we accumulate qty separately below
+      void totalQty;
+    }
+    // Two-pass: first qty + Σ(qty×price), then divide.
+    const buyAgg = new Map<string, { qty: number; spend: number }>();
+    for (const t of s.trades) {
+      if (t.side !== 'BUY') continue;
+      const cur = buyAgg.get(t.symbol) ?? { qty: 0, spend: 0 };
+      cur.qty   += t.quantity;
+      cur.spend += t.quantity * t.price;
+      buyAgg.set(t.symbol, cur);
+    }
+    for (const [sym, agg] of buyAgg) {
+      if (agg.qty > 0) costBasis.set(sym, agg.spend / agg.qty);
+    }
+
     const enriched = await Promise.all(
       s.holdings.map(async (h) => {
+        const out = { ...h };
+        const q = qMap.get(h.symbol);
+
+        // Live price & day% from yahoo when available.
+        if (q) {
+          const px  = typeof q.regularMarketPrice         === 'number' ? q.regularMarketPrice         : null;
+          const ch  = typeof q.regularMarketChange        === 'number' ? q.regularMarketChange        : null;
+          const chp = typeof q.regularMarketChangePercent === 'number' ? q.regularMarketChangePercent : null;
+          if (px != null) {
+            const ccy = typeof q.currency === 'string' ? q.currency : 'USD';
+            out.price = formatPriceForCurrency(px, ccy);
+          }
+          if (chp != null) {
+            out.dayPct = `${chp >= 0 ? '+' : ''}${chp.toFixed(2)}`;
+          } else if (ch != null && q.regularMarketPreviousClose) {
+            const computed = (ch / q.regularMarketPreviousClose) * 100;
+            out.dayPct = `${computed >= 0 ? '+' : ''}${computed.toFixed(2)}`;
+          }
+
+          // plPct from cost basis when we have BUY trades for this symbol.
+          const cost = costBasis.get(h.symbol);
+          if (px != null && cost != null && cost > 0) {
+            const plp = (px / cost - 1) * 100;
+            out.plPct = `${plp >= 0 ? '+' : ''}${plp.toFixed(0)}%`;
+          }
+        }
+
+        // Volatility risk (B12-2).
         const score = await volatilityScore(h.symbol);
-        return score != null ? { ...h, risk: score } : h;
+        if (score != null) out.risk = score;
+
+        return out;
       }),
     );
     res.json(enriched);
   });
 });
+
+/** Locale-aware price formatting; mirrors the prototype's currency glyphs. */
+function formatPriceForCurrency(value: number, ccy: string): string {
+  const u = ccy.toUpperCase();
+  if (u === 'KRW' || u === 'JPY') {
+    return `${u === 'KRW' ? '₩' : '¥'}${Math.round(value).toLocaleString('en-US')}`;
+  }
+  const glyph = u === 'EUR' ? '€' : u === 'GBP' ? '£' : u === 'HKD' ? 'HK$' : '$';
+  return `${glyph}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 portfolio.get('/watchlist', (req: Request, res: Response): void => {
   const region = String(req.query.region ?? 'KR').toUpperCase();

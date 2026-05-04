@@ -22,6 +22,7 @@ import { localStore }   from '../storage/local.js';
 import { readConfig, writeConfig } from '../storage/config.js';
 import {
   mirrorToSheets,
+  mirrorToSheetsFresh,
   createSpreadsheet,
   lookupSpreadsheet,
   extractSpreadsheetId,
@@ -201,6 +202,26 @@ googleRouter.post('/sync-now', async (_req: Request, res: Response) => {
     }
   } catch (err) {
     res.status(500).json({ ok: false, reason: 'sync_failed', detail: String(err) });
+  }
+});
+
+/**
+ * POST /rewrite — wipes and rewrites all 8 portfolio tabs with fresh
+ * headers + a single current-state data block. AI tabs are preserved.
+ * Use when accumulated history has misaligned headers or the user just
+ * wants a clean slate. (B16-2)
+ */
+googleRouter.post('/rewrite', async (_req: Request, res: Response) => {
+  try {
+    const store = await localStore.read(null);
+    const result = await mirrorToSheetsFresh(store);
+    if (result.ok) {
+      res.json({ ok: true, syncedAt: result.syncedAt });
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (err) {
+    res.status(500).json({ ok: false, reason: 'rewrite_failed', detail: String(err) });
   }
 });
 
