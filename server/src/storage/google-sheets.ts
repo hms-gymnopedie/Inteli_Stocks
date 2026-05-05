@@ -28,8 +28,10 @@
  *   AI_Verdicts       — 1 row per /verdict call
  *   AI_Hedges         — 1 row per /hedge call
  *
- * The leftmost column on every row is `synced_at` (ISO 8601, UTC) so the
- * spreadsheet is its own timeline.
+ * The leftmost column on every row is `synced_at` — ISO 8601 with the
+ * timezone offset for the user's region (TIMEZONE env var, defaults to
+ * America/New_York). Sheets / Excel parse the offset-stamped ISO as a
+ * real datetime so chronological sorts still work.
  *
  * Failure handling: every error captured in StorageConfig.lastSyncError and
  * logged; nothing throws back to the caller, so a Sheets outage doesn't
@@ -40,6 +42,7 @@ import type { sheets_v4 } from 'googleapis';
 import * as google from '../providers/google.js';
 import { readConfig, writeConfig } from './config.js';
 import type { PortfolioStore } from './types.js';
+import { formatISOInTZ } from '../lib/time.js';
 
 // ─── Sheet tab names ────────────────────────────────────────────────────────
 
@@ -277,7 +280,7 @@ export async function mirrorToSheets(
     const sheets = google.sheetsClient();
     await ensureTabs(sheets, cfg.spreadsheetId);
 
-    const at = new Date().toISOString();
+    const at = formatISOInTZ();
 
     await appendTab(sheets, cfg.spreadsheetId, TAB_SUMMARY,   SUMMARY_HEADER,    summaryRows(store.summary, at));
     await appendTab(sheets, cfg.spreadsheetId, TAB_HOLDINGS,  HOLDINGS_HEADER,   holdingsRows(store.holdings, at));
@@ -320,7 +323,7 @@ export async function mirrorToSheetsFresh(
     const sheets = google.sheetsClient();
     await ensureTabs(sheets, cfg.spreadsheetId);
 
-    const at = new Date().toISOString();
+    const at = formatISOInTZ();
     await rewriteTab(sheets, cfg.spreadsheetId, TAB_SUMMARY,   SUMMARY_HEADER,    summaryRows(store.summary, at));
     await rewriteTab(sheets, cfg.spreadsheetId, TAB_HOLDINGS,  HOLDINGS_HEADER,   holdingsRows(store.holdings, at));
     await rewriteTab(sheets, cfg.spreadsheetId, TAB_ALLOC_SEC, ALLOCATION_HEADER, allocationRows(store.allocation.sector, at));
@@ -427,7 +430,7 @@ export async function appendAIVerdict(
   v: AIVerdictItem,
   meta: AIGenerationMeta,
 ): Promise<MirrorResult | MirrorSkipped> {
-  const at = new Date().toISOString();
+  const at = formatISOInTZ();
   const u = meta.usage;
   const row: Row = [
     at, meta.provider, meta.model,
@@ -445,7 +448,7 @@ export async function appendAIHedge(
   h: AIHedgeItem,
   meta: AIGenerationMeta,
 ): Promise<MirrorResult | MirrorSkipped> {
-  const at = new Date().toISOString();
+  const at = formatISOInTZ();
   const u = meta.usage;
   const row: Row = [
     at, meta.provider, meta.model,
@@ -463,7 +466,7 @@ export async function appendAISignals(
   meta: AIGenerationMeta,
 ): Promise<MirrorResult | MirrorSkipped> {
   if (items.length === 0) return { ok: false, reason: 'no_spreadsheet' };
-  const at = new Date().toISOString();
+  const at = formatISOInTZ();
   const u = meta.usage;
   const rows: Row[] = items.map((s): Row => [
     at, meta.provider, meta.model,
@@ -480,7 +483,7 @@ export async function appendAIInsights(
   meta: AIGenerationMeta,
 ): Promise<MirrorResult | MirrorSkipped> {
   if (items.length === 0) return { ok: false, reason: 'no_spreadsheet' };
-  const at = new Date().toISOString();
+  const at = formatISOInTZ();
   const u = meta.usage;
   const rows: Row[] = items.map((i): Row => [
     at, meta.provider, meta.model,

@@ -18,6 +18,7 @@ import cron from 'node-cron';
 import { localStore } from '../storage/local.js';
 import { mirrorToSheets } from '../storage/google-sheets.js';
 import * as slack from '../providers/slack.js';
+import { formatISOInTZ } from '../lib/time.js';
 
 let _started = false;
 
@@ -50,7 +51,7 @@ async function runDailySync(): Promise<void> {
   try {
     const store = await localStore.read(null);
     const r = await mirrorToSheets(store);
-    mirrorResult = r.ok ? `Sheets ✅ ${new Date(r.syncedAt).toISOString()}` : `Sheets — ${r.reason}`;
+    mirrorResult = r.ok ? `Sheets ✅ ${formatISOInTZ(new Date(r.syncedAt))}` : `Sheets — ${r.reason}`;
   } catch (err) {
     mirrorResult = `Sheets ❌ ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -62,7 +63,7 @@ async function runDailySync(): Promise<void> {
       const s = store.summary;
       const lines = [
         '*InteliStock daily heartbeat*',
-        `${new Date().toISOString().slice(0, 10)} · ${mirrorResult}`,
+        `${formatISOInTZ().slice(0, 10)} · ${mirrorResult}`,
         '',
         `NAV ${s.navFormatted}  ·  Day ${s.dayChange} (${s.dayChangePct})`,
         `YTD ${s.ytd}  ·  1Y ${s.oneYear}  ·  Sharpe ${s.sharpe}`,
