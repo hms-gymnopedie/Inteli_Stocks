@@ -198,18 +198,40 @@ export function LineChart({
 
 // ---------- CANDLES ----------
 
+interface OHLCBar { open: number; high: number; low: number; close: number }
+
 export function CandleChart({
   w = 400,
   h = 100,
   count = 50,
   seed = 5,
+  data = null,
 }: {
   w?: number;
   h?: number;
   count?: number;
   seed?: number;
+  /** Optional real OHLC bars. When provided, replaces the synthetic
+   *  generator and renders actual prices normalized into [0,h]. */
+  data?: OHLCBar[] | null;
 }) {
   const candles = useMemo(() => {
+    if (data && data.length >= 1) {
+      // Normalize all hi/lo into [0,1] so the existing renderer (which
+      // expects 0..1) doesn't change.
+      let lo = Infinity, hi = -Infinity;
+      for (const b of data) {
+        if (b.low  < lo) lo = b.low;
+        if (b.high > hi) hi = b.high;
+      }
+      const span = hi - lo || 1;
+      return data.map((b) => ({
+        open:  (b.open  - lo) / span,
+        close: (b.close - lo) / span,
+        hi:    (b.high  - lo) / span,
+        lo:    (b.low   - lo) / span,
+      }));
+    }
     const r = seededRand(seed);
     const out: { open: number; close: number; hi: number; lo: number }[] = [];
     let v = 0.5;
@@ -223,8 +245,8 @@ export function CandleChart({
       out.push({ open, close, hi, lo });
     }
     return out;
-  }, [count, seed]);
-  const cw = (w - 8) / count;
+  }, [data, count, seed]);
+  const cw = (w - 8) / candles.length;
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
@@ -265,18 +287,25 @@ export function BarChart({
   count = 30,
   seed = 7,
   accent = false,
+  data = null,
 }: {
   w?: number;
   h?: number;
   count?: number;
   seed?: number;
   accent?: boolean;
+  /** Optional real magnitudes (e.g. volumes) — normalized into [0,1]. */
+  data?: number[] | null;
 }) {
   const bars = useMemo(() => {
+    if (data && data.length >= 1) {
+      const max = Math.max(...data, 1);
+      return data.map((v) => v / max);
+    }
     const r = seededRand(seed);
     return Array.from({ length: count }, () => r());
-  }, [count, seed]);
-  const cw = (w - 4) / count;
+  }, [data, count, seed]);
+  const cw = (w - 4) / bars.length;
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}

@@ -27,7 +27,13 @@ import type {
 } from '../storage/types.js';
 import { runBacktest, type EquityPoint as BTEquityPoint } from '../lib/backtest.js';
 import { volatilityScore } from '../lib/risk.js';
-import { computeRiskFactors } from '../lib/factors.js';
+import {
+  computeRiskFactors,
+  sectorOf,
+  detectCurrency,
+  detectRegion,
+  assetClassOf,
+} from '../lib/factors.js';
 import { fetchQuotes } from '../providers/yahoo.js';
 
 export const portfolio = Router();
@@ -152,6 +158,37 @@ async function recomputeSummary(
   const sharpeNum = curveSharpe(oneYrCurve);
   const ddPct = curveMaxDrawdown(oneYrCurve);
 
+  // ── 3. Exposure / cash split from holdings weights (B23-2) ───────────────
+  // Σ holdings weight is the invested portion; remainder treated as cash.
+  // This stops the static "92% / cash 8%" string from being mirrored
+  // forever when the user actually has 100% invested or is over-allocated.
+  let invested = 0;
+  for (const h of store.holdings) invested += parseWeight(h.weight);
+  const investedPct = Math.min(1, invested) * 100;
+  const cashPct = Math.max(0, 100 - investedPct);
+  const exposureStr     = `${Math.round(investedPct)}%`;
+  const exposureNoteStr = cashPct > 0 ? `cash ${Math.round(cashPct)}%` : 'fully invested';
+
+  // ── 4. Risk score from per-holding volatility scores (B23-3) ─────────────
+  // Weighted avg of each holding's σ-bucket (1=defensive … 5=high-vol).
+  // Norm against actual invested weight so cash doesn't dilute the score.
+  let riskNum = 0;
+  let riskW   = 0;
+  await Promise.all(store.holdings.map(async (h) => {
+    const w = parseWeight(h.weight);
+    const score = await volatilityScore(h.symbol).catch(() => null);
+    if (score != null && w > 0) { riskNum += w * score; riskW += w; }
+  }));
+  const riskScoreNum = riskW > 0 ? riskNum / riskW : 0;
+  const riskScoreStr = riskW > 0 ? `${riskScoreNum.toFixed(1)}/5` : seed.riskScore;
+  const riskNoteStr  = riskW === 0      ? seed.riskNote
+                     : riskScoreNum < 1.8 ? 'defensive'
+                     : riskScoreNum < 2.4 ? 'balanced'
+                     : riskScoreNum < 2.9 ? 'moderate'
+                     : riskScoreNum < 3.4 ? 'moderate-aggr'
+                     : riskScoreNum < 4.0 ? 'aggressive'
+                     :                       'high-vol concentrated';
+
   return {
     ...seed,
     navFormatted:  fmtNAV(seed.nav),
@@ -161,6 +198,10 @@ async function recomputeSummary(
     oneYear:       oneYrPct != null ? fmtSignedPct(oneYrPct) : seed.oneYear,
     sharpe:        sharpeNum != null ? Number(sharpeNum.toFixed(2)) : seed.sharpe,
     drawdown:      ddPct != null ? fmtSignedPct(ddPct) : seed.drawdown,
+    exposure:      exposureStr,
+    exposureNote:  exposureNoteStr,
+    riskScore:     riskScoreStr,
+    riskNote:      riskNoteStr,
   };
 }
 
@@ -284,10 +325,52 @@ portfolio.get('/allocation', (req: Request, res: Response): void => {
   const by    = String(req.query.by ?? 'sector') as 'sector' | 'region' | 'asset';
   const store  = storeFor(req);
   const userId = req.user?.id ?? null;
-  void store.read(userId).then((s) => {
-    res.json(s.allocation[by] ?? s.allocation.sector);
+  void store.read(userId).then(async (s) => {
+    try {
+      const slices = await computeAllocation(s, by);
+      // Empty slices = no holdings; fall back to seed so the panel doesn't
+      // go blank in fresh installs.
+      res.json(slices.length > 0 ? slices : (s.allocation[by] ?? s.allocation.sector));
+    } catch (err) {
+      console.error('[portfolio/allocation]', err);
+      res.json(s.allocation[by] ?? s.allocation.sector);
+    }
   });
 });
+
+/**
+ * Live allocation from holdings × yahoo metadata (B23-4).
+ *   sector — Σ weight by yahoo assetProfile.sector
+ *   region — Σ weight by ticker suffix (US / Korea / Japan / etc.)
+ *   asset  — Σ weight by yahoo quoteType (Equities / ETFs / Crypto / …)
+ *
+ * Always appends a synthetic 'Cash' slice for any leftover (Σ holdings
+ * weight < 100%). Sorted descending so largest allocation reads first.
+ */
+async function computeAllocation(
+  store: PortfolioStore,
+  by: 'sector' | 'region' | 'asset',
+): Promise<{ name: string; v: number }[]> {
+  const buckets = new Map<string, number>();
+  let invested = 0;
+  await Promise.all(store.holdings.map(async (h) => {
+    const w = parseWeight(h.weight) * 100;
+    if (w <= 0) return;
+    invested += w;
+    let bucket = 'Unknown';
+    if      (by === 'sector') bucket = await sectorOf(h.symbol).catch(() => 'Unknown');
+    else if (by === 'region') bucket = detectRegion(h.symbol);
+    else                      bucket = await assetClassOf(h.symbol).catch(() => 'Other');
+    buckets.set(bucket, (buckets.get(bucket) ?? 0) + w);
+  }));
+
+  const cash = Math.max(0, 100 - Math.min(100, invested));
+  if (cash > 0.5) buckets.set('Cash', cash);
+
+  return [...buckets.entries()]
+    .map(([name, v]) => ({ name, v: Number(v.toFixed(1)) }))
+    .sort((a, b) => b.v - a.v);
+}
 
 portfolio.get('/holdings', (req: Request, res: Response): void => {
   const store  = storeFor(req);
@@ -385,11 +468,33 @@ portfolio.get('/watchlist', (req: Request, res: Response): void => {
   const region = String(req.query.region ?? 'KR').toUpperCase();
   const store  = storeFor(req);
   const userId = req.user?.id ?? null;
-  void store.read(userId).then((s) => {
-    if (region === 'KR') {
+  void store.read(userId).then(async (s) => {
+    if (region !== 'KR') { res.json([]); return; }
+    // Refresh `change` per row from live yahoo quotes (B23-5). KR codes are
+    // 6 digits; yahoo expects '<code>.KS' for KOSPI tickers — try .KS first,
+    // fall back to .KQ on miss.
+    try {
+      const ksSyms = s.watchlist.KR.map((w) => `${w.code}.KS`);
+      const quotes = ksSyms.length > 0
+        ? await fetchQuotes(ksSyms).catch(() => [] as Awaited<ReturnType<typeof fetchQuotes>>)
+        : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const qMap = new Map<string, any>(quotes.map((q: any) => [String(q.symbol), q]));
+      const enriched = s.watchlist.KR.map((w) => {
+        const q = qMap.get(`${w.code}.KS`);
+        const chp = q && typeof q.regularMarketChangePercent === 'number'
+          ? q.regularMarketChangePercent
+          : null;
+        if (chp == null) return w;
+        return {
+          ...w,
+          change:    `${chp >= 0 ? '+' : ''}${chp.toFixed(2)}%`,
+          direction: (chp >= 0 ? 1 : -1) as 1 | -1,
+        };
+      });
+      res.json(enriched);
+    } catch {
       res.json(s.watchlist.KR);
-    } else {
-      res.json([]);
     }
   });
 });

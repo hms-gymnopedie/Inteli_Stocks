@@ -58,10 +58,11 @@ export function MainChart({
     return bars.reduce((sum, b) => sum + b.volume, 0);
   }, [bars]);
 
-  // Pre-compute a per-bar seed offset so the synthetic chart shifts when
-  // range changes. Real OHLC plot is deferred to B2-MD when bars become
-  // real; until then keep using the primitives' synthetic series so visual
-  // density tracks the range tab.
+  // Real series for chart primitives (B23-1). LineChart accepts an array
+  // of closes; CandleChart accepts OHLC bars; BarChart accepts volumes.
+  // Synthetic seed is kept only as a fallback when bars haven't loaded.
+  const closes = useMemo(() => bars?.map((b) => b.close) ?? null, [bars]);
+  const volumes = useMemo(() => bars?.map((b) => b.volume) ?? null, [bars]);
   const chartSeed = useMemo(() => 11 + range.length * 3, [range]);
   const showVol = studies.has('VOL');
   const dimmed = loading && !bars ? { opacity: 0.4 } : undefined;
@@ -135,7 +136,7 @@ export function MainChart({
       </div>
       <div style={{ marginTop: 10, ...dimmed }}>
         {values.chartStyle === 'candle' ? (
-          <CandleChart w={800} h={200} count={62} seed={chartSeed} />
+          <CandleChart w={800} h={200} count={62} seed={chartSeed} data={bars ?? null} />
         ) : (
           <LineChart
             w={800}
@@ -145,6 +146,7 @@ export function MainChart({
             grid={values.showGrid}
             area={values.chartStyle === 'area'}
             strokeWidth={1.4}
+            data={closes}
           />
         )}
       </div>
@@ -152,7 +154,7 @@ export function MainChart({
         <>
           <hr className="wf-divider" style={{ margin: '8px 0' }} />
           <div style={{ height: 50, ...dimmed }}>
-            <BarChart w={800} h={50} count={62} seed={chartSeed + 4} accent />
+            <BarChart w={800} h={50} count={62} seed={chartSeed + 4} accent data={volumes} />
           </div>
         </>
       )}

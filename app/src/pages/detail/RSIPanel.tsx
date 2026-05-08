@@ -53,18 +53,18 @@ export function RSIPanel({ symbol }: RSIPanelProps) {
     [symbol],
   );
 
-  const latestRSI = useMemo(() => {
+  // Compute the full RSI series so we can both pull the latest value AND
+  // plot the actual line (B23-1). Leading bars before the period reach
+  // RSI is undefined and dropped.
+  const rsiSeries = useMemo(() => {
     if (!bars || bars.length === 0) return null;
-    const rsi = computeRSI(bars);
-    for (let i = rsi.length - 1; i >= 0; i--) {
-      if (Number.isFinite(rsi[i])) return rsi[i];
-    }
-    return null;
+    return computeRSI(bars).filter((v) => Number.isFinite(v));
   }, [bars]);
+  const latestRSI = rsiSeries && rsiSeries.length > 0
+    ? rsiSeries[rsiSeries.length - 1]
+    : null;
 
-  // Use the symbol/seed pair the LineChart primitive expects. Until we
-  // implement a real RSI line plot, derive a chart seed from the symbol so
-  // different symbols look distinct.
+  // Per-symbol seed kept as fallback for the rare case where RSI is empty.
   const seed = useMemo(() => {
     let s = 20;
     for (const c of symbol) s += c.charCodeAt(0);
@@ -97,6 +97,7 @@ export function RSIPanel({ symbol }: RSIPanelProps) {
           grid={values.showGrid}
           trend={0.4}
           stroke="var(--orange)"
+          data={rsiSeries}
         />
       </div>
       <div className="row between wf-mini" style={{ marginTop: 4 }}>

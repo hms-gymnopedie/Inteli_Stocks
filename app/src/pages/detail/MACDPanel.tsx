@@ -93,7 +93,23 @@ export function MACDPanel({ symbol }: MACDPanelProps) {
 
   const result = useMemo(() => (bars ? computeMacd(bars) : null), [bars]);
 
-  // Per-symbol seed so the synthetic chart shifts with the symbol.
+  // Full MACD line series for the chart (B23-1). computeMacd only returns
+  // the latest values; rebuild the aligned valid series here.
+  const macdSeries = useMemo(() => {
+    if (!bars || bars.length < SLOW + SIGNAL) return null;
+    const closes = bars.map((b) => b.close);
+    const fastE = ema(closes, FAST);
+    const slowE = ema(closes, SLOW);
+    const out: number[] = [];
+    for (let i = 0; i < closes.length; i++) {
+      const f = fastE[i];
+      const s = slowE[i];
+      if (Number.isFinite(f) && Number.isFinite(s)) out.push(f - s);
+    }
+    return out.length > 0 ? out : null;
+  }, [bars]);
+
+  // Per-symbol seed kept as fallback.
   const seed = useMemo(() => {
     let s = 21;
     for (const c of symbol) s += c.charCodeAt(0);
@@ -136,6 +152,7 @@ export function MACDPanel({ symbol }: MACDPanelProps) {
           grid={values.showGrid}
           trend={0.2}
           accent
+          data={macdSeries}
         />
       </div>
       <div className="row between wf-mini" style={{ marginTop: 4 }}>

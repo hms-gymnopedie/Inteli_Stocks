@@ -44,7 +44,7 @@ function parseWeight(s: string): number {
   return m ? parseFloat(m[1]) / 100 : 0;
 }
 
-function detectCurrency(symbol: string): string {
+export function detectCurrency(symbol: string): string {
   const u = symbol.toUpperCase();
   if (u.endsWith('.KS') || u.endsWith('.KQ')) return 'KRW';
   if (u.endsWith('.T'))                       return 'JPY';
@@ -54,6 +54,20 @@ function detectCurrency(symbol: string): string {
   if (u.endsWith('.AX'))                      return 'AUD';
   if (u.endsWith('.DE') || u.endsWith('.PA') || u.endsWith('.AS')) return 'EUR';
   return 'USD';
+}
+
+/** Map a ticker to a coarse region label (Korea / US / Japan / EU / etc.). */
+export function detectRegion(symbol: string): string {
+  const u = symbol.toUpperCase();
+  if (u.endsWith('.KS') || u.endsWith('.KQ')) return 'Korea';
+  if (u.endsWith('.T'))                       return 'Japan';
+  if (u.endsWith('.HK'))                      return 'Hong Kong';
+  if (u.endsWith('.SS') || u.endsWith('.SZ')) return 'China';
+  if (u.endsWith('.L'))                       return 'UK';
+  if (u.endsWith('.TO') || u.endsWith('.V'))  return 'Canada';
+  if (u.endsWith('.AX'))                      return 'Australia';
+  if (u.endsWith('.DE') || u.endsWith('.PA') || u.endsWith('.AS') || u.endsWith('.MI')) return 'Europe';
+  return 'US';
 }
 
 function round2(n: number): number {
@@ -113,7 +127,7 @@ async function dailyReturns(symbol: string): Promise<number[]> {
   }).catch(() => [] as number[]);
 }
 
-async function sectorOf(symbol: string): Promise<string> {
+export async function sectorOf(symbol: string): Promise<string> {
   return _sectorCache.get(symbol, async () => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,6 +136,36 @@ async function sectorOf(symbol: string): Promise<string> {
       return typeof sec === 'string' && sec.trim() ? sec : 'Unknown';
     } catch {
       return 'Unknown';
+    }
+  });
+}
+
+const _quoteTypeCache = new TTLCache<string>(6 * ONE_HOUR_MS);
+
+/**
+ * Return the broad asset class for a symbol from yahoo's `quoteType`:
+ *   EQUITY → 'Equities', ETF → 'ETFs', MUTUALFUND → 'Funds',
+ *   CRYPTOCURRENCY → 'Crypto', INDEX → 'Indices', FUTURE → 'Commodities',
+ *   CURRENCY → 'FX', anything else → 'Other'.
+ */
+export async function assetClassOf(symbol: string): Promise<string> {
+  return _quoteTypeCache.get(symbol, async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const r = (await fetchQuoteSummary(symbol, ['quoteType'])) as any;
+      const qt = String(r?.quoteType?.quoteType ?? '').toUpperCase();
+      switch (qt) {
+        case 'EQUITY':         return 'Equities';
+        case 'ETF':            return 'ETFs';
+        case 'MUTUALFUND':     return 'Funds';
+        case 'CRYPTOCURRENCY': return 'Crypto';
+        case 'INDEX':          return 'Indices';
+        case 'FUTURE':         return 'Commodities';
+        case 'CURRENCY':       return 'FX';
+        default:               return 'Other';
+      }
+    } catch {
+      return 'Other';
     }
   });
 }
