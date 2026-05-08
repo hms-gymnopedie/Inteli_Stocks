@@ -13,6 +13,7 @@ import { Login } from './pages/auth/Login';
 import { AIAssistant } from './pages/ai-assistant';
 import { Leaderboard } from './pages/leaderboard';
 import { Positions } from './pages/positions';
+import { Guide } from './pages/guide';
 
 const NAV = [
   { to: '/overview',     label: 'Overview'     },
@@ -23,6 +24,7 @@ const NAV = [
   { to: '/leaderboard',  label: 'Leaderboard'  },
   { to: '/ai-assistant', label: 'AI Assistant' },
   { to: '/settings',     label: 'Settings'     },
+  { to: '/guide',        label: 'Guide'        },
 ];
 
 // ─── Auth chip (shown in topbar when signed in via Supabase) ──────────────────
@@ -171,6 +173,7 @@ export function App() {
               <Route path="/leaderboard"     element={<RequireAuth><Leaderboard /></RequireAuth>} />
               <Route path="/ai-assistant"    element={<RequireAuth><AIAssistant /></RequireAuth>} />
               <Route path="/positions"       element={<RequireAuth><Positions /></RequireAuth>} />
+              <Route path="/guide"           element={<RequireAuth><Guide /></RequireAuth>} />
               <Route path="/settings"        element={<RequireAuth><Settings /></RequireAuth>} />
               <Route path="*"                element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
             </Routes>
