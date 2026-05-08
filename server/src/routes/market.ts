@@ -13,6 +13,7 @@ import {
 } from '../providers/yahoo.js';
 import * as finnhub from '../providers/finnhub.js';
 import * as grounded from '../providers/gemini-grounded.js';
+import { fetchCNNFearGreed } from '../providers/cnnFearGreed.js';
 
 /**
  * /api/market/* — owned by B2-MD.
@@ -339,12 +340,17 @@ market.get('/sp-constituents', (_req: Request, res: Response) => {
 // ─── GET /api/market/fear-greed ───────────────────────────────────────────────
 
 /**
- * Fear & Greed Index — CNN has no public API, so we ask Gemini with web
- * search grounding to read the public CNN page (or any equivalent source)
- * and return the four canonical values as JSON. Cached 1 h.
+ * Fear & Greed Index. Three-tier source ladder:
  *
- * Falls back to a static mock when no GEMINI_API_KEY is configured or
- * grounding fails (network error, JSON parse fail, etc.).
+ *   1. CNN's unofficial JSON endpoint (production.dataviz.cnn.io) —
+ *      authoritative, includes ~3y of daily history. Browser-like headers
+ *      required to bypass UA gating.
+ *   2. Gemini grounded search — fallback for headline values when CNN
+ *      blocks us (rate-limit / cloudflare / VPN).
+ *   3. Synthetic ramp — fallback for the daily array when neither above
+ *      delivers it.
+ *
+ * Cached 6h via the providers' own TTL caches; this handler stitches results.
  */
 market.get('/fear-greed', async (_req: Request, res: Response) => {
   // Synthetic daily ramp for the fallback so the chart isn't flat.
@@ -370,6 +376,18 @@ market.get('/fear-greed', async (_req: Request, res: Response) => {
     daily:     fallbackDaily,
   };
 
+  // 1. CNN direct — primary source.
+  try {
+    const cnn = await fetchCNNFearGreed();
+    if (Number.isFinite(cnn.value) && cnn.daily.length > 0) {
+      res.json(cnn);
+      return;
+    }
+  } catch (err) {
+    console.warn('[market/fear-greed] CNN direct failed:', (err as Error).message);
+  }
+
+  // 2. Gemini grounded — fallback for headline.
   const today = new Date().toISOString().slice(0, 10);
   const result = await grounded.askJSON<{
     value: number; label: string; yesterday: number; oneWeek: number; oneMonth: number;

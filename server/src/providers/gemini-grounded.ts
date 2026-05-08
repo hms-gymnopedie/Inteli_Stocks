@@ -46,13 +46,55 @@ interface AskOpts {
   maxOutputTokens?: number;
 }
 
-/** Strip ```json fences and trim. */
-function unfence(text: string): string {
-  return text
+/**
+ * Extract a JSON value from a prose-wrapped response.
+ *
+ * Gemini with googleSearch grounding often prepends explanatory prose
+ * ("The CNN Fear & Greed Index is currently…") before the JSON, even
+ * when the prompt explicitly forbids it. Stripping markdown fences
+ * isn't enough — we need to actually find the first '{' or '[' and
+ * parse the matching closing brace, ignoring whatever comes before
+ * or after.
+ *
+ * Returns the JSON substring (still as text) or '' when no JSON is found.
+ */
+function extractJSON(text: string): string {
+  // Fast path: stripped output already starts with { or [
+  const stripped = text
     .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i,    '')
-    .replace(/```\s*$/,     '')
+    .replace(/^```\s*/i,     '')
+    .replace(/```\s*$/,      '')
     .trim();
+  if (stripped.startsWith('{') || stripped.startsWith('[')) {
+    return stripped;
+  }
+  // Slow path: scan for the first '{' or '[' that opens a balanced JSON
+  // value. Track string boundaries so braces inside string literals
+  // don't fool the depth counter.
+  for (let start = 0; start < stripped.length; start++) {
+    const openCh = stripped[start];
+    if (openCh !== '{' && openCh !== '[') continue;
+    const closeCh = openCh === '{' ? '}' : ']';
+    let depth = 0;
+    let inStr = false;
+    let esc   = false;
+    for (let i = start; i < stripped.length; i++) {
+      const ch = stripped[i];
+      if (inStr) {
+        if (esc)            { esc = false; continue; }
+        if (ch === '\\')    { esc = true;  continue; }
+        if (ch === '"')     { inStr = false; }
+        continue;
+      }
+      if (ch === '"')       { inStr = true; continue; }
+      if (ch === openCh)    { depth++; }
+      else if (ch === closeCh) {
+        depth--;
+        if (depth === 0)    { return stripped.slice(start, i + 1); }
+      }
+    }
+  }
+  return '';
 }
 
 /**
@@ -82,12 +124,17 @@ export async function askJSON<T>(opts: AskOpts): Promise<T | null> {
         },
       });
       const text = response.text ?? '';
-      const stripped = unfence(text);
-      if (!stripped) return null;
+      const json = extractJSON(text);
+      if (!json) {
+        console.warn(`[gemini-grounded] no JSON found for ${opts.cacheKey} in: ${text.slice(0, 120)}…`);
+        return null;
+      }
       try {
-        return JSON.parse(stripped) as T;
+        return JSON.parse(json) as T;
       } catch (err) {
-        console.warn(`[gemini-grounded] JSON parse failed for ${opts.cacheKey}:`, (err as Error).message);
+        console.warn(
+          `[gemini-grounded] JSON parse failed for ${opts.cacheKey}: ${(err as Error).message} — extracted: ${json.slice(0, 120)}…`,
+        );
         return null;
       }
     } catch (err) {
