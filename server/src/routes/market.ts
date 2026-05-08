@@ -347,34 +347,63 @@ market.get('/sp-constituents', (_req: Request, res: Response) => {
  * grounding fails (network error, JSON parse fail, etc.).
  */
 market.get('/fear-greed', async (_req: Request, res: Response) => {
+  // Synthetic daily ramp for the fallback so the chart isn't flat.
+  const fallbackDaily = (() => {
+    const out: { date: string; value: number }[] = [];
+    const today = new Date();
+    const seed = [41, 39, 42, 45, 47, 44, 46, 48, 50, 52, 49, 51, 53, 55, 54,
+                  56, 53, 55, 58, 56, 59, 57, 60, 58, 61, 59, 60, 58, 60, 62];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - (29 - i));
+      out.push({ date: d.toISOString().slice(0, 10), value: seed[i] });
+    }
+    return out;
+  })();
+
   const FALLBACK = {
     value:     62,
     label:     'Greed',
     yesterday: 58,
     oneWeek:   49,
     oneMonth:  41,
+    daily:     fallbackDaily,
   };
 
   const today = new Date().toISOString().slice(0, 10);
   const result = await grounded.askJSON<{
     value: number; label: string; yesterday: number; oneWeek: number; oneMonth: number;
+    daily?: { date: string; value: number }[];
   }>({
     cacheKey:   `fear-greed:${today}`,
     cacheTtlMs: 6 * 60 * 60 * 1000, // 6h — F&G updates daily
-    prompt: `Look up the CURRENT CNN Fear & Greed Index (visit money.cnn.com/data/fear-and-greed/ or equivalent).
+    maxOutputTokens: 2048,
+    prompt: `Look up the CURRENT CNN Fear & Greed Index (money.cnn.com/data/fear-and-greed/ or equivalent).
 Return a single JSON object with these exact fields, no markdown fences:
 {
-  "value": <integer 0-100, current score>,
-  "label": <one of: "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed">,
+  "value":     <integer 0-100, current score>,
+  "label":     <one of: "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed">,
   "yesterday": <integer 0-100, score 1 day ago>,
   "oneWeek":   <integer 0-100, score 1 week ago>,
-  "oneMonth":  <integer 0-100, score 1 month ago>
+  "oneMonth":  <integer 0-100, score 1 month ago>,
+  "daily": [
+    { "date": "YYYY-MM-DD", "value": <integer 0-100> },
+    ...                      // last 30 trading days, oldest first → newest last
+  ]
 }
-Only output the JSON object. No prose, no markdown.`,
+"daily" must contain ~30 entries spanning the past month, with the most
+recent entry's value matching "value". Output ONLY the JSON object.`,
   });
 
   if (result && Number.isFinite(result.value)) {
-    res.json(result);
+    // Backfill daily if Gemini didn't include it.
+    const out = {
+      ...result,
+      daily: Array.isArray(result.daily) && result.daily.length > 0
+        ? result.daily
+        : fallbackDaily,
+    };
+    res.json(out);
   } else {
     res.json(FALLBACK);
   }

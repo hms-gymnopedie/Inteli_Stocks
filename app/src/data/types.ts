@@ -77,6 +77,9 @@ export interface FearGreed {
   yesterday: number;
   oneWeek: number;
   oneMonth: number;
+  /** Optional daily history (last ~30 days, oldest → newest) for the
+   *  trend sparkline below the gauge. (B21) */
+  daily?: { date: string; value: number }[];
 }
 
 /** An economic / earnings calendar event. */
