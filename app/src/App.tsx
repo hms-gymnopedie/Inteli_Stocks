@@ -12,10 +12,12 @@ import { Settings } from './pages/settings';
 import { Login } from './pages/auth/Login';
 import { AIAssistant } from './pages/ai-assistant';
 import { Leaderboard } from './pages/leaderboard';
+import { Positions } from './pages/positions';
 
 const NAV = [
   { to: '/overview',     label: 'Overview'     },
   { to: '/portfolio',    label: 'Portfolio'    },
+  { to: '/positions',    label: 'Trades'       },
   { to: '/geo',          label: 'Geo Risk'     },
   { to: '/detail',       label: 'Detail'       },
   { to: '/leaderboard',  label: 'Leaderboard'  },
@@ -168,6 +170,7 @@ export function App() {
               <Route path="/detail/:symbol"  element={<RequireAuth><Detail /></RequireAuth>} />
               <Route path="/leaderboard"     element={<RequireAuth><Leaderboard /></RequireAuth>} />
               <Route path="/ai-assistant"    element={<RequireAuth><AIAssistant /></RequireAuth>} />
+              <Route path="/positions"       element={<RequireAuth><Positions /></RequireAuth>} />
               <Route path="/settings"        element={<RequireAuth><Settings /></RequireAuth>} />
               <Route path="*"                element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
             </Routes>
