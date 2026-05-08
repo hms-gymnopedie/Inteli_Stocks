@@ -248,28 +248,64 @@ export function NewTradeForm({ onSubmitted, onCancel }: Props) {
             required
           />
           <div className="wf-mini muted-2" style={{ letterSpacing: '0.04em' }}>
-            SELL TRIGGERS · all optional · any one fires Slack alert
+            SELL TRIGGERS · all optional · any one fires Slack alert · click a chip to fill, then edit
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span className="wf-mini muted">Sell-by date</span>
               <input style={cell} type="date" value={sellByDate} onChange={(e) => setSellByDate(e.target.value)} />
+              <PresetChips
+                presets={dateOffsetPresets()}
+                onPick={setSellByDate}
+              />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span className="wf-mini muted">% from entry (e.g. 20 = +20% target / −10 = stop)</span>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span className="wf-mini muted">% from entry (positive = profit target, negative = stop-loss)</span>
               <input style={cell} type="number" step="any" value={pctBase} onChange={(e) => setPctBase(e.target.value)} placeholder="±%" />
+              <PresetChips
+                presets={[
+                  { label: '+10%', value: '10' },
+                  { label: '+20%', value: '20' },
+                  { label: '+30%', value: '30' },
+                  { label: '+50%', value: '50' },
+                  { label: '−5%',  value: '-5'  },
+                  { label: '−10%', value: '-10' },
+                  { label: '−15%', value: '-15' },
+                ]}
+                onPick={setPctBase}
+              />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span className="wf-mini muted">Absolute price ≥</span>
               <input style={cell} type="number" min="0" step="any" value={absAbove} onChange={(e) => setAbsAbove(e.target.value)} placeholder={`above ${px || 'price'}`} />
+              <PresetChips
+                presets={pricePresets(px, [+5, +10, +20, +30])}
+                onPick={setAbsAbove}
+                disabled={!px}
+              />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span className="wf-mini muted">Absolute price ≤</span>
               <input style={cell} type="number" min="0" step="any" value={absBelow} onChange={(e) => setAbsBelow(e.target.value)} placeholder={`below ${px || 'price'}`} />
+              <PresetChips
+                presets={pricePresets(px, [-5, -10, -15, -20])}
+                onPick={setAbsBelow}
+                disabled={!px}
+              />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 2, gridColumn: '1 / -1' }}>
-              <span className="wf-mini muted">Trailing stop − % from peak (negative number, e.g. −10)</span>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, gridColumn: '1 / -1' }}>
+              <span className="wf-mini muted">Trailing stop − % from peak (negative; the stop floats up as price hits new highs)</span>
               <input style={cell} type="number" step="any" value={trailing} onChange={(e) => setTrailing(e.target.value)} placeholder="−%" />
+              <PresetChips
+                presets={[
+                  { label: '−5%',  value: '-5'  },
+                  { label: '−8%',  value: '-8'  },
+                  { label: '−10%', value: '-10' },
+                  { label: '−15%', value: '-15' },
+                  { label: '−20%', value: '-20' },
+                ]}
+                onPick={setTrailing}
+              />
             </label>
           </div>
         </>
@@ -287,4 +323,72 @@ export function NewTradeForm({ onSubmitted, onCancel }: Props) {
       </div>
     </form>
   );
+}
+
+// ─── Preset chip helpers (B20) ──────────────────────────────────────────────
+
+interface Preset { label: string; value: string }
+
+function PresetChips({
+  presets,
+  onPick,
+  disabled,
+}: {
+  presets: Preset[];
+  onPick: (v: string) => void;
+  disabled?: boolean;
+}) {
+  if (presets.length === 0) return null;
+  return (
+    <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+      {presets.map((p) => (
+        <button
+          key={p.label}
+          type="button"
+          onClick={() => onPick(p.value)}
+          disabled={disabled}
+          className="trigger-preset-chip"
+          title={`Fill with ${p.value}`}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Compute "+N% of base price" presets as absolute price strings, rounded
+ * sensibly. Empty list when base price isn't provided yet.
+ */
+function pricePresets(basePriceStr: string, pcts: number[]): Preset[] {
+  const base = Number(basePriceStr);
+  if (!Number.isFinite(base) || base <= 0) return [];
+  return pcts.map((pct) => {
+    const target = base * (1 + pct / 100);
+    // 2 decimals for $X (USD), integer for X >= 1000 (KRW-ish).
+    const value = target >= 1000
+      ? String(Math.round(target))
+      : target.toFixed(2);
+    const sign = pct >= 0 ? '+' : '−';
+    return { label: `${sign}${Math.abs(pct)}%  ($${value})`, value };
+  });
+}
+
+function dateOffsetPresets(): Preset[] {
+  const today = new Date();
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const offsets: { label: string; days?: number; months?: number; years?: number }[] = [
+    { label: '+1m',  months: 1  },
+    { label: '+3m',  months: 3  },
+    { label: '+6m',  months: 6  },
+    { label: '+1y',  years:  1  },
+  ];
+  return offsets.map((o) => {
+    const d = new Date(today);
+    if (o.days)   d.setDate(d.getDate() + o.days);
+    if (o.months) d.setMonth(d.getMonth() + o.months);
+    if (o.years)  d.setFullYear(d.getFullYear() + o.years);
+    return { label: o.label, value: fmt(d) };
+  });
 }

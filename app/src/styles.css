@@ -2393,6 +2393,31 @@ svg [data-pin='true']:focus-visible {
 }
 .help-popover-body li { margin: 2px 0; }
 
+/* === Preset chips for trigger inputs (B20) =========================== */
+
+.trigger-preset-chip {
+  background: var(--panel-2);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.02em;
+  color: var(--fg-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 80ms linear, border-color 80ms linear, background 80ms linear;
+}
+.trigger-preset-chip:hover:not(:disabled) {
+  color: var(--orange);
+  border-color: var(--orange);
+  background: var(--panel);
+}
+.trigger-preset-chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* === POSITIONS panel (B18) =========================================== */
 
 .positions-list {
