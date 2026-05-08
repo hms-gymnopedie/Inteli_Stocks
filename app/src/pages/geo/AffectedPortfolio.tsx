@@ -17,6 +17,7 @@ export function AffectedPortfolio() {
 
   return (
     <div
+      data-tour="geo-affected"
       style={{
         padding: 14,
         borderBottom: '1px solid var(--hairline)',

@@ -24,7 +24,7 @@ export function TodaysEvents() {
   const filtered = highOnly ? events.filter((e) => e.impact === 'HIGH') : events;
 
   return (
-    <div>
+    <div data-tour="ov-events">
       <div className="row between center">
         <div className="wf-label">Today · Key events</div>
         <button

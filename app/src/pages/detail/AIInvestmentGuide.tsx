@@ -87,7 +87,7 @@ function Inner({ symbol, initial, tz, tzAbbrev, loadingHistory }: InnerProps) {
   const dimmed = !result ? { opacity: 0.5 } : undefined;
 
   return (
-    <div>
+    <div data-tour="dt-aiguide">
       <div className="row between">
         <div className="wf-label">AI Investment Guide</div>
         {loadingHistory ? (

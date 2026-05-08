@@ -16,7 +16,7 @@ export function GlobalRiskIndex() {
       }}
     >
       <div
-        className="wf-panel"
+        className="wf-panel" data-tour="geo-index"
         style={{
           padding: '8px 12px',
           backdropFilter: 'blur(8px)',

@@ -28,7 +28,7 @@ export function MacroMonitor() {
   const items = data ?? SKELETON;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }}>
+    <div className="wf-panel" data-tour="ov-macro" style={{ padding: 12 }}>
       <div className="row between">
         <div className="wf-label">Macro Monitor</div>
         <div className="wf-mini muted-2">Fed · BoK · ECB</div>

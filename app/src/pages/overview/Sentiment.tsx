@@ -20,7 +20,7 @@ export function Sentiment() {
   const dimmed = loading && !data ? { opacity: 0.4 } : undefined;
 
   return (
-    <div>
+    <div data-tour="ov-sentiment">
       <div className="wf-label">Market sentiment</div>
       <div
         className="wf-panel-flat"

@@ -100,7 +100,7 @@ export function OptionsChainMini({ symbol = 'NVDA' }: OptionsChainMiniProps) {
   const atm = surface ? atmIndex(surface.strikes) : -1;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }} aria-busy={loading}>
+    <div className="wf-panel" data-tour="dt-iv" style={{ padding: 12 }} aria-busy={loading}>
       <div className="row between">
         <div className="wf-label">Options chain · IV surface · {symbol}</div>
         <div className="wf-mini muted-2">

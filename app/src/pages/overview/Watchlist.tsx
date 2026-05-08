@@ -16,7 +16,7 @@ export function Watchlist() {
     : Array.from({ length: SKELETON_ROWS }, () => null);
 
   return (
-    <div>
+    <div data-tour="ov-watchlist">
       <div className="wf-label">Watchlist · Korea</div>
       <div style={{ marginTop: 8 }} aria-busy={loading}>
         {rows.map((row, i) =>

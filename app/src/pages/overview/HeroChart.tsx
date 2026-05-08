@@ -214,7 +214,7 @@ export function HeroChart() {
   }, [bounds, innerW]);
 
   return (
-    <div className="wf-panel" style={{ padding: 14 }}>
+    <div className="wf-panel" data-tour="ov-hero" style={{ padding: 14 }}>
       <div className="row between center">
         <div>
           <div className="wf-label">Primary · S&amp;P 500 · {range}</div>

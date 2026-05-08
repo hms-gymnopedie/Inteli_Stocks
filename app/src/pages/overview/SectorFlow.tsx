@@ -28,7 +28,7 @@ export function SectorFlow() {
   }, [data, sort]);
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }}>
+    <div className="wf-panel" data-tour="ov-flow" style={{ padding: 12 }}>
       <div className="row between center">
         <div className="wf-label">Sector flow · Today</div>
         <div className="row gap-1" role="tablist" aria-label="Sort mode">

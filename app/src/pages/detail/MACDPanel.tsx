@@ -137,7 +137,7 @@ export function MACDPanel({ symbol }: MACDPanelProps) {
         : `SIGNAL ↓ CROSS · ${Math.abs(result.barsSinceCross)}D AGO`;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }} aria-busy={loading}>
+    <div className="wf-panel" data-tour="dt-macd" style={{ padding: 12 }} aria-busy={loading}>
       <div className="row between">
         <div className="wf-label">
           MACD ({FAST},{SLOW},{SIGNAL})

@@ -28,7 +28,7 @@ export function Workspaces() {
   const navigate = useNavigate();
 
   return (
-    <div>
+    <div data-tour="ov-workspaces">
       <div className="wf-label">Workspaces</div>
       <ul
         role="list"

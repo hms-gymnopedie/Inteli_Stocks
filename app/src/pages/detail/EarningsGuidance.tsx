@@ -62,7 +62,7 @@ export function EarningsGuidance({ symbol = 'NVDA' }: EarningsGuidanceProps) {
   const dimmed = loading && !data ? { opacity: 0.4 } : undefined;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }} aria-busy={loading}>
+    <div className="wf-panel" data-tour="dt-earnings" style={{ padding: 12 }} aria-busy={loading}>
       <div className="row between">
         <div className="wf-label">Earnings &amp; guidance · {symbol}</div>
         <div className="wf-mini muted-2">EPS · est vs actual</div>

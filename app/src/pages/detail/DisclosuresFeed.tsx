@@ -30,7 +30,7 @@ export function DisclosuresFeed({ symbol = 'NVDA' }: DisclosuresFeedProps) {
   const isEmpty = data !== undefined && data.length === 0;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }}>
+    <div className="wf-panel" data-tour="dt-disclosures" style={{ padding: 12 }}>
       <div className="row between">
         <div className="wf-label">Disclosures · Filings</div>
         <span className="wf-mini muted">last 30D</span>

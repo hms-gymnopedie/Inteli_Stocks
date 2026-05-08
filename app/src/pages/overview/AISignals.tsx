@@ -81,7 +81,7 @@ function AISignalsInner({ hydration, tz, tzAbbrev, loadingHistory }: InnerProps)
   );
 
   return (
-    <div>
+    <div data-tour="ov-aisignals">
       <div className="row between">
         <div className="wf-label">AI Assistant</div>
         {loadingHistory ? (

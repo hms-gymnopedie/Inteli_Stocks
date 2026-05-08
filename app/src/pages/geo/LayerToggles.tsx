@@ -45,7 +45,7 @@ export function LayerToggles() {
 
   return (
     <div
-      className="wf-panel"
+      className="wf-panel" data-tour="geo-layers"
       style={{
         padding: 12,
         backdropFilter: 'blur(8px)',

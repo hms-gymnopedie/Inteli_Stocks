@@ -82,7 +82,7 @@ export function RSIPanel({ symbol }: RSIPanelProps) {
           : 'accent';
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }} aria-busy={loading}>
+    <div className="wf-panel" data-tour="dt-rsi" style={{ padding: 12 }} aria-busy={loading}>
       <div className="row between">
         <div className="wf-label">RSI ({PERIOD})</div>
         <div className={`wf-mono ${rsiClass}`}>

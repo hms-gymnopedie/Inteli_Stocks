@@ -39,7 +39,7 @@ export function RiskDecomposition() {
   const selectedFactor = data?.find((f) => f.name === selected) ?? null;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }} aria-busy={loading}>
+    <div className="wf-panel" data-tour="pf-risk" style={{ padding: 12 }} aria-busy={loading}>
       <div className="row between">
         <div className="wf-label">Risk decomposition · Factor exposure</div>
         <div className="wf-mini muted-2">

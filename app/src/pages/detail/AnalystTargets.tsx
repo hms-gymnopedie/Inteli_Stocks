@@ -19,7 +19,7 @@ export function AnalystTargets({ symbol }: AnalystTargetsProps) {
   const { data, loading } = useAsync(() => getTargets(symbol), [symbol]);
 
   return (
-    <div aria-busy={loading}>
+    <div data-tour="dt-targets" aria-busy={loading}>
       <div className="wf-label">Analyst targets</div>
       <div
         className="wf-panel-flat"

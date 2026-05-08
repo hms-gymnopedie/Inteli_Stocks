@@ -94,7 +94,7 @@ export function TradesLog() {
   });
 
   return (
-    <div className="wf-panel" style={{ padding: 0 }}>
+    <div className="wf-panel" data-tour="pf-trades" style={{ padding: 0 }}>
       <div className="row between" style={{ padding: 12, gap: 12, flexWrap: 'wrap' }}>
         <div className="wf-label">
           Trades log · {data ? `${filtered.length} of ${data.length}` : '—'}

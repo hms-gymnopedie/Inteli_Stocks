@@ -37,7 +37,7 @@ export function Allocation({ onSliceClick }: AllocationProps) {
   const dimmed = loading && !data ? { opacity: 0.4 } : undefined;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }}>
+    <div className="wf-panel" data-tour="pf-allocation" style={{ padding: 12 }}>
       <div className="row between">
         <div className="wf-label">Allocation</div>
         <div

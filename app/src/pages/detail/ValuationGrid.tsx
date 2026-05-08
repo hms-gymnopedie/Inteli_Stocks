@@ -28,7 +28,7 @@ export function ValuationGrid({ symbol }: ValuationGridProps) {
   const dimmed = loading && !data ? { opacity: 0.4 } : undefined;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }} aria-busy={loading}>
+    <div className="wf-panel" data-tour="dt-valuation" style={{ padding: 12 }} aria-busy={loading}>
       <div className="row between">
         <div className="wf-label">Valuation · Fundamentals</div>
         <div className="wf-mini muted-2">FY24 · TTM</div>

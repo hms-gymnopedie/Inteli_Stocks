@@ -4,6 +4,8 @@ import { FetchIndicator, LiveClock, RefreshButton } from './lib/FetchIndicator';
 import { SymbolSearch } from './lib/SymbolSearch';
 import { TweaksPanel, TweaksProvider } from './lib/tweaks';
 import { AuthProvider, useAuth } from './lib/auth';
+import { Tour } from './lib/Tour';
+import { TourProvider, useTour } from './lib/TourContext';
 import { Overview } from './pages/overview';
 import { Portfolio } from './pages/portfolio';
 import { GeoRisk } from './pages/geo';
@@ -147,42 +149,67 @@ function TopBar() {
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
+function AppShell() {
+  const { activeTour, stop } = useTour();
+  return (
+    <>
+      <div className="shell">{shellContent()}</div>
+      <TweaksPanel />
+      {/* Global ⌘K symbol search */}
+      <SymbolSearch />
+      {activeTour && <Tour steps={activeTour.steps} onClose={stop} />}
+    </>
+  );
+}
+
+function shellContent() {
+  return (
+    <>
+      {/* Skip-link — first focusable element on the page. */}
+      <a href="#main" className="skip-link">
+        Skip to main content
+      </a>
+      <TopBar />
+      <main id="main" className="view" tabIndex={-1}>
+        <AppRoutes />
+      </main>
+    </>
+  );
+}
+
+function AppRoutes() {
+  return (
+    <Routes>
+      {/* Public auth routes (always accessible) */}
+      <Route path="/login"  element={<Login />} />
+      <Route path="/signup" element={<Login />} />
+
+      {/* Protected app routes — RequireAuth redirects to /login in Supabase mode */}
+      <Route path="/" element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
+      <Route path="/overview"        element={<RequireAuth><Overview /></RequireAuth>} />
+      <Route path="/portfolio"       element={<RequireAuth><Portfolio /></RequireAuth>} />
+      <Route path="/geo"             element={<RequireAuth><GeoRisk /></RequireAuth>} />
+      <Route path="/detail"          element={<RequireAuth><Detail /></RequireAuth>} />
+      <Route path="/detail/:symbol"  element={<RequireAuth><Detail /></RequireAuth>} />
+      <Route path="/settings"        element={<RequireAuth><Settings /></RequireAuth>} />
+      <Route path="/leaderboard"     element={<RequireAuth><Leaderboard /></RequireAuth>} />
+      <Route path="/ai-assistant"    element={<RequireAuth><AIAssistant /></RequireAuth>} />
+      <Route path="/positions"       element={<RequireAuth><Positions /></RequireAuth>} />
+      <Route path="/guide"           element={<RequireAuth><Guide /></RequireAuth>} />
+      <Route path="*"                element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
+    </Routes>
+  );
+}
+
 export function App() {
   return (
     <TweaksProvider>
       <AuthProvider>
-        <div className="shell">
-          {/* Skip-link — first focusable element on the page. */}
-          <a href="#main" className="skip-link">
-            Skip to main content
-          </a>
-          <TopBar />
-          <main id="main" className="view" tabIndex={-1}>
-            <Routes>
-              {/* Public auth routes (always accessible) */}
-              <Route path="/login"  element={<Login />} />
-              <Route path="/signup" element={<Login />} />
-
-              {/* Protected app routes — RequireAuth redirects to /login in Supabase mode */}
-              <Route path="/" element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
-              <Route path="/overview"        element={<RequireAuth><Overview /></RequireAuth>} />
-              <Route path="/portfolio"       element={<RequireAuth><Portfolio /></RequireAuth>} />
-              <Route path="/geo"             element={<RequireAuth><GeoRisk /></RequireAuth>} />
-              <Route path="/detail"          element={<RequireAuth><Detail /></RequireAuth>} />
-              <Route path="/detail/:symbol"  element={<RequireAuth><Detail /></RequireAuth>} />
-              <Route path="/leaderboard"     element={<RequireAuth><Leaderboard /></RequireAuth>} />
-              <Route path="/ai-assistant"    element={<RequireAuth><AIAssistant /></RequireAuth>} />
-              <Route path="/positions"       element={<RequireAuth><Positions /></RequireAuth>} />
-              <Route path="/guide"           element={<RequireAuth><Guide /></RequireAuth>} />
-              <Route path="/settings"        element={<RequireAuth><Settings /></RequireAuth>} />
-              <Route path="*"                element={<RequireAuth><Navigate to="/overview" replace /></RequireAuth>} />
-            </Routes>
-          </main>
-        </div>
-        <TweaksPanel />
-        {/* Global ⌘K symbol search */}
-        <SymbolSearch />
+        <TourProvider>
+          <AppShell />
+        </TourProvider>
       </AuthProvider>
     </TweaksProvider>
   );
 }
+

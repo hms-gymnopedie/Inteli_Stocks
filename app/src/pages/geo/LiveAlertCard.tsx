@@ -22,7 +22,7 @@ export function LiveAlertCard() {
 
   return (
     <div
-      className="wf-panel"
+      className="wf-panel" data-tour="geo-alert"
       style={{
         padding: 12,
         backdropFilter: 'blur(8px)',

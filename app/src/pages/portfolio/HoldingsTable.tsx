@@ -132,7 +132,7 @@ export function HoldingsTable() {
   const positionCount = data?.length ?? 0;
 
   return (
-    <div className="wf-panel" style={{ padding: 0 }}>
+    <div className="wf-panel" data-tour="pf-holdings" style={{ padding: 0 }}>
       <div className="row between" style={{ padding: 12, gap: 12 }}>
         <div className="wf-label" style={{ display: 'inline-flex', alignItems: 'center' }}>
           Holdings · {data ? `${positionCount} positions` : '— positions'}

@@ -33,6 +33,7 @@ export function IndicesStrip() {
 
   return (
     <div
+      data-tour="ov-indices"
       style={{
         display: 'grid',
         gridTemplateColumns: `repeat(${items.length || SKELETON_COUNT}, 1fr)`,

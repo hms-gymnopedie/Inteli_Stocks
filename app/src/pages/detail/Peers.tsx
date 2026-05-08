@@ -19,7 +19,7 @@ export function Peers({ symbol, onPeerClick }: PeersProps) {
   const { data, loading } = useAsync(() => getPeers(symbol), [symbol]);
 
   return (
-    <div aria-busy={loading}>
+    <div data-tour="dt-peers" aria-busy={loading}>
       <div className="wf-label">Peers</div>
       <div
         style={{

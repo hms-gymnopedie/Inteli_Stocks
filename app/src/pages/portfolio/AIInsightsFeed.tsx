@@ -112,6 +112,7 @@ function AIInsightsInner({ hydration }: AIInsightsInnerProps) {
 
   return (
     <aside
+      data-tour="pf-insights"
       style={{
         borderLeft: '1px solid var(--hairline)',
         display: 'flex',

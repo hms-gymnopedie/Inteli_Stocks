@@ -8,6 +8,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { useTour } from '../../lib/TourContext';
+import { TOURS } from '../../lib/tours';
 
 // ─── TOC structure ──────────────────────────────────────────────────────────
 
@@ -105,6 +107,7 @@ export function Guide() {
             The dashboard refreshes live data on a polling cadence you control in
             <Link to="/settings"> Settings</Link>.
           </p>
+          <TourLauncher />
         </Section>
 
         {/* === Setup === */}
@@ -549,6 +552,39 @@ export function Guide() {
 
         <div style={{ height: 80 }} />
       </main>
+    </div>
+  );
+}
+
+// ─── Tour launcher (B25) ────────────────────────────────────────────────────
+
+function TourLauncher() {
+  const { start } = useTour();
+  return (
+    <div className="guide-tour-launcher">
+      <div className="wf-mini muted-2" style={{ marginBottom: 8, letterSpacing: '0.04em' }}>
+        ▶ INTERACTIVE TOUR — see each section highlighted in context
+      </div>
+      <div className="row gap-1" style={{ flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          className="lb-btn lb-btn-primary"
+          onClick={() => start('master')}
+          title="Walk every page section start to finish"
+        >
+          ▶ Full dashboard tour ({TOURS.master.steps.length} steps)
+        </button>
+        {(['overview', 'portfolio', 'positions', 'geo', 'detail', 'leaderboard', 'ai', 'settings'] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            className="lb-btn lb-btn-ghost"
+            onClick={() => start(k)}
+          >
+            {TOURS[k].label} ({TOURS[k].steps.length})
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -47,6 +47,7 @@ export function Hotspots() {
 
   return (
     <div
+      data-tour="geo-hotspots"
       style={{
         padding: 14,
         borderBottom: '1px solid var(--hairline)',

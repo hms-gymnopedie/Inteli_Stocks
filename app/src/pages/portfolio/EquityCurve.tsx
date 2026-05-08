@@ -140,7 +140,7 @@ export function EquityCurve() {
     : 0;
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }}>
+    <div className="wf-panel" data-tour="pf-equity" style={{ padding: 12 }}>
       <div className="row between" style={{ alignItems: 'flex-start' }}>
         <div>
           <div className="wf-label">Equity curve · {range}</div>

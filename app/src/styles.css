@@ -2393,6 +2393,148 @@ svg [data-pin='true']:focus-visible {
 }
 .help-popover-body li { margin: 2px 0; }
 
+/* === Guide tour launcher (B25) ======================================= */
+
+.guide-tour-launcher {
+  background: var(--panel);
+  border: 1px solid var(--orange);
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin: 12px 0;
+}
+
+/* === TOUR overlay (B25) ============================================== */
+
+.tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+.tour-mask {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: auto;
+}
+.tour-spotlight-ring {
+  position: fixed;
+  border: 2px solid var(--orange);
+  border-radius: 8px;
+  box-shadow: 0 0 0 3px rgba(255, 122, 26, 0.18);
+  pointer-events: none;
+  transition: all 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tour-popover {
+  position: fixed;
+  background: var(--panel);
+  border: 1px solid var(--orange);
+  border-radius: 6px;
+  padding: 14px 16px 12px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--fg-2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  z-index: 1001;
+  transition: top 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+              left 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.tour-popover-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.tour-step-counter {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--orange);
+  text-transform: uppercase;
+}
+.tour-skip {
+  background: transparent;
+  border: 0;
+  color: var(--fg-3);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+.tour-skip:hover { color: var(--fg); }
+.tour-title {
+  font-size: 14px;
+  color: var(--fg);
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.tour-body {
+  font-size: 11.5px;
+  color: var(--fg-2);
+  margin-bottom: 12px;
+  line-height: 1.6;
+}
+.tour-body code {
+  background: var(--panel-2);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg);
+}
+.tour-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.tour-btn {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  padding: 5px 11px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-2);
+  cursor: pointer;
+  transition: color 80ms linear, border-color 80ms linear, background 80ms linear;
+}
+.tour-btn:hover:not(:disabled) {
+  color: var(--orange);
+  border-color: var(--orange);
+}
+.tour-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tour-btn-primary {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #000;
+}
+.tour-btn-primary:hover:not(:disabled) {
+  background: #ff8c3a;
+  border-color: #ff8c3a;
+  color: #000;
+}
+.tour-btn-ghost { background: transparent; }
+
+.tour-missing {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--panel);
+  border: 1px solid var(--orange);
+  border-radius: 6px;
+  padding: 18px 20px;
+  width: 360px;
+  pointer-events: auto;
+  z-index: 1001;
+  font-size: 12px;
+  color: var(--fg-2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
 /* === GUIDE / Onboarding (B24) ======================================== */
 
 .guide-layout {

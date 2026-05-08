@@ -195,6 +195,7 @@ export function Header({ symbol }: HeaderProps) {
 
   return (
     <div
+      data-tour="dt-header"
       style={{
         padding: '14px 18px',
         borderBottom: '1px solid var(--hairline)',

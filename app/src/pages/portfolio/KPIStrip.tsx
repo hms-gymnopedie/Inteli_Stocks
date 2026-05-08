@@ -54,7 +54,7 @@ export function KPIStrip() {
 
   return (
     <div
-      className="wf-panel"
+      className="wf-panel" data-tour="pf-kpi"
       style={{
         padding: 14,
         display: 'grid',

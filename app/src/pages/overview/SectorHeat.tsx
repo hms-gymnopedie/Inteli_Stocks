@@ -69,7 +69,7 @@ export function SectorHeat() {
   const blocks = useMemo(() => groupBySector(cells), [cells]);
 
   return (
-    <div className="wf-panel" style={{ padding: 12 }}>
+    <div className="wf-panel" data-tour="ov-heat" style={{ padding: 12 }}>
       <div className="row between">
         <div>
           <div className="wf-label">S&amp;P 500 · Sector heatmap</div>

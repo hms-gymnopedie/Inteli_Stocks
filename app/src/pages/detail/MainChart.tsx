@@ -68,7 +68,7 @@ export function MainChart({
   const dimmed = loading && !bars ? { opacity: 0.4 } : undefined;
 
   return (
-    <div className="wf-panel" style={{ padding: 14 }} aria-busy={loading}>
+    <div className="wf-panel" data-tour="dt-mainchart" style={{ padding: 14 }} aria-busy={loading}>
       <div className="row between">
         <div className="row gap-2" role="tablist" aria-label="Time range">
           {RANGES.map((t, i) => {
