@@ -5,6 +5,7 @@ import {
   addTrade,
   addWatchlist,
 } from '../../data/portfolio';
+import { addPosition, type SellTrigger } from '../../data/positions';
 import type { AIVerdict, Trade } from '../../data/types';
 import type { HistoryEntry } from '../../data/aiHistoryTypes';
 import { useAsync } from '../../lib/useAsync';
@@ -139,13 +140,38 @@ export function Header({ symbol }: HeaderProps) {
     }
   }
 
-  async function onAddTrade(t: Trade): Promise<void> {
+  async function onAddTrade(
+    t: Trade,
+    rationale?: { reason: string; triggers: SellTrigger[] },
+  ): Promise<void> {
     setActionBusy(true);
     setActionMsg(null);
     try {
       await addTrade(t);
+      // For BUY trades, register the rationale + sell triggers (B18).
+      if (t.side === 'BUY' && rationale && rationale.reason.trim()) {
+        try {
+          await addPosition({
+            symbol:     t.symbol,
+            reason:     rationale.reason,
+            entryPrice: t.price,
+            triggers:   rationale.triggers,
+          });
+        } catch (rerr) {
+          // Trade succeeded; surface rationale failure but don't roll back.
+          setActionMsg(
+            `Logged ${t.side} ${t.quantity} ${t.symbol} — but rationale save failed: ${rerr instanceof Error ? rerr.message : String(rerr)}`,
+          );
+          setShowTradeForm(false);
+          return;
+        }
+      }
       setShowTradeForm(false);
-      setActionMsg(`Logged ${t.side} ${t.quantity} ${t.symbol}.`);
+      setActionMsg(
+        t.side === 'BUY' && rationale
+          ? `Logged BUY ${t.quantity} ${t.symbol} + sell triggers registered.`
+          : `Logged ${t.side} ${t.quantity} ${t.symbol}.`,
+      );
     } catch (e) {
       setActionMsg(`Failed: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -323,7 +349,7 @@ interface TradeChipProps {
   currency: string;
   price: number;
   busy: boolean;
-  onSubmit: (t: Trade) => Promise<void> | void;
+  onSubmit: (t: Trade, rationale?: { reason: string; triggers: SellTrigger[] }) => Promise<void> | void;
   onCancel: () => void;
 }
 
@@ -333,6 +359,14 @@ function TradeChip({ symbol, currency, price, busy, onSubmit, onCancel }: TradeC
   const [side, setSide] = useState<'BUY' | 'SELL'>('BUY');
   const [qty, setQty] = useState('1');
   const [px, setPx]   = useState(String(price || 0));
+
+  // Rationale + sell-trigger fields (B18) — required when side=BUY.
+  const [reason,    setReason]    = useState('');
+  const [sellByDate,setSellByDate]= useState('');
+  const [absAbove,  setAbsAbove]  = useState('');
+  const [absBelow,  setAbsBelow]  = useState('');
+  const [pctBase,   setPctBase]   = useState('');
+  const [trailing,  setTrailing]  = useState('');
 
   const cell: React.CSSProperties = {
     background: 'var(--panel-2)',
@@ -348,46 +382,127 @@ function TradeChip({ symbol, currency, price, busy, onSubmit, onCancel }: TradeC
 
   const submit = (e: React.FormEvent): void => {
     e.preventDefault();
-    void onSubmit({
+    const trade: Trade = {
       date,
       symbol,
       side,
       quantity: Number(qty) || 0,
       price:    Number(px) || 0,
       currency,
-    });
+    };
+    if (side === 'SELL') {
+      void onSubmit(trade);
+      return;
+    }
+    // BUY: collect rationale + triggers.
+    if (!reason.trim()) {
+      // The required attribute on the textarea handles UX; fail-safe:
+      return;
+    }
+    const triggers: SellTrigger[] = [];
+    if (sellByDate.length === 10) {
+      triggers.push({ type: 'date', date: sellByDate });
+    }
+    if (absAbove && Number(absAbove) > 0) {
+      triggers.push({ type: 'absoluteAbove', price: Number(absAbove) });
+    }
+    if (absBelow && Number(absBelow) > 0) {
+      triggers.push({ type: 'absoluteBelow', price: Number(absBelow) });
+    }
+    if (pctBase && Number.isFinite(Number(pctBase))) {
+      triggers.push({ type: 'pctFromBase', basePrice: trade.price, pct: Number(pctBase) });
+    }
+    if (trailing && Number(trailing) < 0) {
+      triggers.push({ type: 'trailingFromPeak', pct: Number(trailing), peakPrice: trade.price });
+    }
+    void onSubmit(trade, { reason: reason.trim(), triggers });
   };
+
+  const isBuy = side === 'BUY';
 
   return (
     <form
       onSubmit={submit}
       style={{
-        display: 'grid',
-        gridTemplateColumns: '110px 70px 70px 90px 60px auto',
-        gap: 6,
         marginTop: 8,
-        padding: '8px 10px',
+        padding: '10px 12px',
         background: 'var(--panel-2)',
         borderRadius: 4,
-        alignItems: 'center',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
       }}
     >
-      <input style={cell} type="date"   value={date}  onChange={(e) => setDate(e.target.value)} required />
-      <select style={cell}              value={side}  onChange={(e) => setSide(e.target.value as 'BUY' | 'SELL')}>
-        <option value="BUY">BUY</option>
-        <option value="SELL">SELL</option>
-      </select>
-      <input style={cell} type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="qty" required />
-      <input style={cell} type="number" min="0" step="any" value={px}  onChange={(e) => setPx(e.target.value)}  placeholder="price" required />
-      <span className="wf-mini muted">{currency}</span>
-      <div className="row gap-1">
-        <button type="submit" className="tag" style={{ background: 'var(--orange)', color: '#000', border: 0, cursor: 'pointer' }} disabled={busy}>
-          OK
-        </button>
-        <button type="button" className="tag" style={{ background: 'transparent', cursor: 'pointer' }} onClick={onCancel}>
-          ×
-        </button>
+      {/* Trade core fields */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '110px 70px 70px 90px 60px auto',
+          gap: 6,
+          alignItems: 'center',
+        }}
+      >
+        <input style={cell} type="date"   value={date}  onChange={(e) => setDate(e.target.value)} required />
+        <select style={cell}              value={side}  onChange={(e) => setSide(e.target.value as 'BUY' | 'SELL')}>
+          <option value="BUY">BUY</option>
+          <option value="SELL">SELL</option>
+        </select>
+        <input style={cell} type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="qty" required />
+        <input style={cell} type="number" min="0" step="any" value={px}  onChange={(e) => setPx(e.target.value)}  placeholder="price" required />
+        <span className="wf-mini muted">{currency}</span>
+        <div className="row gap-1">
+          <button type="submit" className="tag" style={{ background: 'var(--orange)', color: '#000', border: 0, cursor: 'pointer' }} disabled={busy}>
+            OK
+          </button>
+          <button type="button" className="tag" style={{ background: 'transparent', cursor: 'pointer' }} onClick={onCancel}>
+            ×
+          </button>
+        </div>
       </div>
+
+      {/* Rationale + sell triggers — only shown for BUY (B18). */}
+      {isBuy && (
+        <>
+          <textarea
+            style={{ ...cell, minHeight: 56, resize: 'vertical' }}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why are you buying? (required) — e.g. 'FY26 capex unchanged + bottoming after correction'"
+            required
+          />
+          <div className="wf-mini muted" style={{ letterSpacing: '0.04em' }}>
+            SELL TRIGGERS — any one fires Slack alert when matched. All optional.
+          </div>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 6,
+            }}
+          >
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="wf-mini muted">Sell-by date</span>
+              <input style={cell} type="date" value={sellByDate} onChange={(e) => setSellByDate(e.target.value)} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="wf-mini muted">% from entry (e.g. 20 = +20% target / −10 = stop)</span>
+              <input style={cell} type="number" step="any" value={pctBase} onChange={(e) => setPctBase(e.target.value)} placeholder="±%" />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="wf-mini muted">Absolute price ≥</span>
+              <input style={cell} type="number" min="0" step="any" value={absAbove} onChange={(e) => setAbsAbove(e.target.value)} placeholder={`above ${px}`} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="wf-mini muted">Absolute price ≤</span>
+              <input style={cell} type="number" min="0" step="any" value={absBelow} onChange={(e) => setAbsBelow(e.target.value)} placeholder={`below ${px}`} />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 2, gridColumn: '1 / -1' }}>
+              <span className="wf-mini muted">Trailing stop − % from peak (negative number, e.g. −10)</span>
+              <input style={cell} type="number" step="any" value={trailing} onChange={(e) => setTrailing(e.target.value)} placeholder="−%" />
+            </label>
+          </div>
+        </>
+      )}
     </form>
   );
 }

@@ -19,6 +19,7 @@ import { localStore } from '../storage/local.js';
 import { mirrorToSheets } from '../storage/google-sheets.js';
 import * as slack from '../providers/slack.js';
 import { formatISOInTZ } from '../lib/time.js';
+import { evalPositions } from '../lib/positionEval.js';
 
 let _started = false;
 
@@ -39,7 +40,19 @@ export function startCronJobs(): void {
     });
   }, { timezone: 'UTC' });
 
-  console.log('[cron] scheduled daily-sync (Mon-Fri 13:00 UTC)');
+  // Hourly position trigger eval Mon-Fri 13-22 UTC ≈ 09-18 ET (covers 09:30
+  // open to 16:00 close + 2-hour buffer). Quiet outside market hours so we
+  // don't burn quota on weekends. (B18-3)
+  cron.schedule('0 13-22 * * 1-5', async () => {
+    try {
+      const r = await evalPositions();
+      if (r.fired > 0) console.log(`[cron] positions: fired ${r.fired}/${r.total}, notified ${r.notified}`);
+    } catch (err) {
+      console.error('[cron] positions eval failed:', err);
+    }
+  }, { timezone: 'UTC' });
+
+  console.log('[cron] scheduled daily-sync (Mon-Fri 13:00 UTC) + hourly position-check (Mon-Fri 13-22 UTC)');
 }
 
 async function runDailySync(): Promise<void> {
