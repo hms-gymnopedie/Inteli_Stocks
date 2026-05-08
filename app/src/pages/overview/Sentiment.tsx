@@ -43,33 +43,51 @@ export function Sentiment() {
 
 interface TrendChartProps { points: { date: string; value: number }[] }
 
+/**
+ * F&G zone definitions per CNN's published cuts. Each band gets a
+ * faint background fill on the chart and a label on the right axis.
+ * Lower bound is inclusive, upper bound is exclusive of the next band.
+ */
+const FG_ZONES = [
+  { lo:  0, hi: 25,  label: 'EXTREME FEAR',  short: 'EF', fill: 'rgba(226, 94, 94, 0.18)' },
+  { lo: 25, hi: 45,  label: 'FEAR',          short: 'F',  fill: 'rgba(226, 94, 94, 0.10)' },
+  { lo: 45, hi: 56,  label: 'NEUTRAL',       short: 'N',  fill: 'rgba(255, 255, 255, 0.05)' },
+  { lo: 56, hi: 76,  label: 'GREED',         short: 'G',  fill: 'rgba(111, 207, 138, 0.10)' },
+  { lo: 76, hi: 101, label: 'EXTREME GREED', short: 'EG', fill: 'rgba(111, 207, 138, 0.18)' },
+] as const;
+
+function zoneFor(v: number): string {
+  for (const z of FG_ZONES) if (v >= z.lo && v < z.hi) return z.label;
+  return 'NEUTRAL';
+}
+
 function FGTrendChart({ points }: TrendChartProps) {
   const W = 280;
-  const H = 56;
+  const H = 130;          // taller — was 56; gives the line room to breathe (B22)
   const PAD_T = 4;
-  const PAD_B = 14;
+  const PAD_B = 16;
   const PAD_L = 4;
-  const PAD_R = 24;
+  const PAD_R = 56;       // wider gutter for zone labels
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
 
-  // Domain: F&G is 0-100 by definition, no need for autoscale.
+  // Domain locked to the F&G 0-100 range.
   const minV = 0;
   const maxV = 100;
+  const yFor = (v: number): number =>
+    PAD_T + (1 - (v - minV) / (maxV - minV)) * innerH;
+
   const stepX = points.length > 1 ? innerW / (points.length - 1) : 0;
 
-  // Build path string.
   const pts = points.map((p, i) => {
     const x = PAD_L + i * stepX;
-    const y = PAD_T + (1 - (p.value - minV) / (maxV - minV)) * innerH;
+    const y = yFor(p.value);
     return [x, y, p] as const;
   });
   const path = pts.map(([x, y], i) => (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1)).join(' ');
-  // Area path (closing back to baseline) for soft fill.
   const areaPath =
     `${path} L${pts[pts.length - 1][0].toFixed(1)} ${(H - PAD_B).toFixed(1)} L${pts[0][0].toFixed(1)} ${(H - PAD_B).toFixed(1)} Z`;
 
-  // Hover state — show value + date for nearest point.
   const [hover, setHover] = useState<{ idx: number; x: number; y: number } | null>(null);
 
   const onMove = (e: React.MouseEvent<SVGSVGElement>): void => {
@@ -86,7 +104,7 @@ function FGTrendChart({ points }: TrendChartProps) {
 
   const last = pts[pts.length - 1];
   const lastValue = last[2].value;
-  const lineColor = lastValue >= 50 ? 'var(--up)' : 'var(--down)';
+  const lineColor = lastValue >= 56 ? 'var(--up)' : lastValue < 45 ? 'var(--down)' : 'var(--fg-2)';
 
   return (
     <div style={{ marginTop: 8, position: 'relative' }}>
@@ -104,43 +122,79 @@ function FGTrendChart({ points }: TrendChartProps) {
         aria-label="Fear & Greed 30-day trend"
         style={{ cursor: 'crosshair' }}
       >
-        {/* 50 = neutral baseline */}
-        <line
-          x1={PAD_L} x2={W - PAD_R}
-          y1={PAD_T + 0.5 * innerH}
-          y2={PAD_T + 0.5 * innerH}
-          stroke="var(--hairline)"
-          strokeDasharray="2 4"
-          strokeWidth={0.5}
-        />
-        {/* Area fill */}
-        <path d={areaPath} fill={lineColor} opacity={0.12} />
+        {/* Zone bands — drawn first so the line + dots paint on top. */}
+        {FG_ZONES.map((z) => {
+          const yTop    = yFor(z.hi - 1);    // hi is exclusive boundary
+          const yBottom = yFor(z.lo);
+          const h = yBottom - yTop;
+          if (h <= 0) return null;
+          return (
+            <g key={z.label}>
+              <rect
+                x={PAD_L} y={yTop}
+                width={innerW} height={h}
+                fill={z.fill}
+              />
+              {/* Boundary line at the top of each band (skip the very top) */}
+              {z.hi !== 101 && (
+                <line
+                  x1={PAD_L} x2={W - PAD_R}
+                  y1={yTop} y2={yTop}
+                  stroke="var(--hairline)"
+                  strokeDasharray="2 4"
+                  strokeWidth={0.5}
+                />
+              )}
+              {/* Right-edge zone label, vertically centered in the band. */}
+              <text
+                x={W - PAD_R + 4}
+                y={(yTop + yBottom) / 2 + 3}
+                fontSize={7.5}
+                fontFamily="var(--font-mono)"
+                fill="var(--fg-3)"
+                letterSpacing="0.04em"
+              >
+                {z.label}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Area fill (line color, fainter so zones still read through) */}
+        <path d={areaPath} fill={lineColor} opacity={0.16} />
         {/* Trend line */}
         <path
           d={path}
           fill="none"
           stroke={lineColor}
-          strokeWidth={1.2}
+          strokeWidth={1.4}
           vectorEffect="non-scaling-stroke"
         />
-        {/* Y-axis labels */}
-        <text x={W - PAD_R + 4} y={PAD_T + 6}
-          fontSize={8} fontFamily="var(--font-mono)" fill="var(--fg-4)"
-        >100</text>
-        <text x={W - PAD_R + 4} y={PAD_T + 0.5 * innerH + 3}
-          fontSize={8} fontFamily="var(--font-mono)" fill="var(--fg-4)"
-        >50</text>
-        <text x={W - PAD_R + 4} y={H - PAD_B + 2}
-          fontSize={8} fontFamily="var(--font-mono)" fill="var(--fg-4)"
-        >0</text>
+
+        {/* Numeric Y-axis ticks at each zone boundary */}
+        {[0, 25, 45, 56, 76, 100].map((v) => (
+          <text
+            key={v}
+            x={W - PAD_R - 2}
+            y={yFor(v) + 3}
+            textAnchor="end"
+            fontSize={7}
+            fontFamily="var(--font-mono)"
+            fill="var(--fg-4)"
+          >
+            {v}
+          </text>
+        ))}
+
         {/* X-axis labels */}
-        <text x={PAD_L} y={H - 2}
+        <text x={PAD_L} y={H - 4}
           fontSize={8} fontFamily="var(--font-mono)" fill="var(--fg-4)"
         >{points[0].date.slice(5)}</text>
-        <text x={W - PAD_R} y={H - 2}
+        <text x={W - PAD_R} y={H - 4}
           textAnchor="end"
           fontSize={8} fontFamily="var(--font-mono)" fill="var(--fg-4)"
         >{points[points.length - 1].date.slice(5)}</text>
+
         {/* Hover crosshair + dot */}
         {hover && (
           <>
@@ -152,7 +206,7 @@ function FGTrendChart({ points }: TrendChartProps) {
               strokeWidth={0.5}
               pointerEvents="none"
             />
-            <circle cx={hover.x} cy={hover.y} r={2.5} fill={lineColor} pointerEvents="none" />
+            <circle cx={hover.x} cy={hover.y} r={3} fill={lineColor} pointerEvents="none" />
           </>
         )}
       </svg>
@@ -166,15 +220,19 @@ function FGTrendChart({ points }: TrendChartProps) {
             background: 'var(--panel-2)',
             border: '1px solid var(--hairline)',
             borderRadius: 3,
-            padding: '2px 6px',
+            padding: '3px 7px',
             fontFamily: 'var(--font-mono)',
             fontSize: 9,
             color: 'var(--fg)',
             pointerEvents: 'none',
             whiteSpace: 'nowrap',
+            lineHeight: 1.4,
           }}
         >
-          {points[hover.idx].date} · {points[hover.idx].value}
+          <div>{points[hover.idx].date} · {points[hover.idx].value}</div>
+          <div className="muted" style={{ fontSize: 8 }}>
+            {zoneFor(points[hover.idx].value)}
+          </div>
         </div>
       )}
     </div>
