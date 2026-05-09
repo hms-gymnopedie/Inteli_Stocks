@@ -284,7 +284,15 @@ export function Leaderboard() {
                     >
                       <td className="lb-td-rank wf-mono">{idx + 1}</td>
                       <td className="lb-td-name">
-                        <div className="lb-name-main">{s.name}</div>
+                        <div className="lb-name-main">
+                          <span
+                            className="lb-overlay-swatch lb-row-swatch"
+                            style={{ background: SERIES_COLORS[idx % SERIES_COLORS.length] }}
+                            aria-hidden
+                            title="Overlay chart color"
+                          />
+                          <span>{s.name}</span>
+                        </div>
                         <div className="lb-name-allocs wf-mini">{shortAllocations(s.allocations)}</div>
                       </td>
                       <td className={'lb-td-num wf-mono ' + (s.metrics.totalReturnPct >= 0 ? 'up' : 'down')}>

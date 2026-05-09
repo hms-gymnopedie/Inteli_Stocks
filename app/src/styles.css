@@ -3003,6 +3003,18 @@ svg [data-pin='true']:focus-visible {
 .lb-name-main {
   color: var(--fg);
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Re-use the overlay legend swatch shape, slightly thicker so it reads
+   inline with 12px text. The colour is set inline by the row to match
+   `SERIES_COLORS[idx]` exactly. (B28-swatch) */
+.lb-row-swatch {
+  width: 14px;
+  height: 4px;
+  flex-shrink: 0;
 }
 
 .lb-name-allocs {
