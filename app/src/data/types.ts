@@ -70,6 +70,14 @@ export interface MacroIndicator {
   trend: number;
 }
 
+/** VIX index headline + 30-day daily history. (B26) */
+export interface VIX {
+  value:     number;
+  change:    number;
+  changePct: number;
+  daily:     { date: string; value: number }[];
+}
+
 /** Fear & Greed gauge data. */
 export interface FearGreed {
   value: number;

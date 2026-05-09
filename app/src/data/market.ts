@@ -13,6 +13,7 @@ import type {
   Range,
   SearchResult,
   SectorReturn,
+  VIX,
   VolumeBar,
   WatchlistEntry,
 } from './types';
@@ -142,6 +143,11 @@ export async function getCalendar(_date: string): Promise<CalendarEvent[]> {
 /** Returns Fear & Greed gauge data including yesterday/1W/1M trail. */
 export async function getFearGreed(): Promise<FearGreed> {
   return apiFetch<FearGreed>('/market/fear-greed');
+}
+
+/** Returns VIX index headline + 30-day daily history. (B26) */
+export async function getVIX(): Promise<VIX> {
+  return apiFetch<VIX>('/market/vix');
 }
 
 /**

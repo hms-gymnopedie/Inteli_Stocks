@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import { getFearGreed } from '../../data/market';
-import type { FearGreed } from '../../data/types';
+import { getFearGreed, getVIX } from '../../data/market';
+import type { FearGreed, VIX } from '../../data/types';
 import { Gauge } from '../../lib/primitives';
 import { useAsync } from '../../lib/useAsync';
 
@@ -16,6 +16,7 @@ const SKELETON: FearGreed = {
 
 export function Sentiment() {
   const { data, loading } = useAsync<FearGreed>(getFearGreed, []);
+  const { data: vix } = useAsync<VIX>(getVIX, []);
   const fg = data ?? SKELETON;
   const dimmed = loading && !data ? { opacity: 0.4 } : undefined;
 
@@ -35,6 +36,35 @@ export function Sentiment() {
         </div>
         {fg.daily && fg.daily.length >= 2 && <FGTrendChart points={fg.daily} />}
       </div>
+
+      {/* VIX panel below F&G (B26) — same daily-trend treatment with VIX-specific zone bands. */}
+      {vix && vix.daily.length >= 2 && (
+        <div
+          className="wf-panel-flat"
+          style={{ padding: 10, marginTop: 10 }}
+        >
+          <div className="row between center">
+            <div className="wf-mini" style={{ letterSpacing: '0.04em' }}>
+              VIX · IMPLIED VOLATILITY
+            </div>
+            <div className="row gap-2 center">
+              <span className="wf-num" style={{ fontSize: 18 }}>
+                {vix.value.toFixed(2)}
+              </span>
+              <span
+                className="wf-mono"
+                style={{
+                  fontSize: 10,
+                  color: vix.changePct >= 0 ? 'var(--down)' : 'var(--up)',
+                }}
+              >
+                {vix.changePct >= 0 ? '+' : '−'}{Math.abs(vix.changePct).toFixed(2)}%
+              </span>
+            </div>
+          </div>
+          <VIXTrendChart points={vix.daily} />
+        </div>
+      )}
     </div>
   );
 }
@@ -232,6 +262,207 @@ function FGTrendChart({ points }: TrendChartProps) {
           <div>{points[hover.idx].date} · {points[hover.idx].value}</div>
           <div className="muted" style={{ fontSize: 8 }}>
             {zoneFor(points[hover.idx].value)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── VIX 30-day trend chart (B26) ──────────────────────────────────────────
+
+/**
+ * VIX zone definitions per common market convention. Higher VIX = more
+ * fear (inverse of F&G), so the band colors flip: low values are calm
+ * (green) and high values are stress (red).
+ */
+const VIX_ZONES = [
+  { lo:  0, hi: 12,  label: 'VERY LOW',   fill: 'rgba(111, 207, 138, 0.18)' },
+  { lo: 12, hi: 20,  label: 'LOW',        fill: 'rgba(111, 207, 138, 0.10)' },
+  { lo: 20, hi: 30,  label: 'ELEVATED',   fill: 'rgba(255, 255, 255, 0.05)' },
+  { lo: 30, hi: 40,  label: 'HIGH',       fill: 'rgba(226, 94, 94, 0.10)'   },
+  { lo: 40, hi: 101, label: 'EXTREME',    fill: 'rgba(226, 94, 94, 0.18)'   },
+] as const;
+
+function vixZoneFor(v: number): string {
+  for (const z of VIX_ZONES) if (v >= z.lo && v < z.hi) return z.label;
+  return v >= 40 ? 'EXTREME' : 'LOW';
+}
+
+function VIXTrendChart({ points }: TrendChartProps) {
+  const W = 280;
+  const H = 130;
+  const PAD_T = 4;
+  const PAD_B = 16;
+  const PAD_L = 4;
+  const PAD_R = 56;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  // VIX domain: clamp to the larger of [0, 50] or actual max so unusual
+  // spikes (March 2020 was 80+) still render without overflowing the band
+  // labels. 50 is the typical headroom for normal regimes.
+  const maxObserved = Math.max(...points.map((p) => p.value), 50);
+  const minV = 0;
+  const maxV = maxObserved <= 50 ? 50 : Math.ceil(maxObserved / 10) * 10;
+
+  const yFor = (v: number): number =>
+    PAD_T + (1 - (Math.min(v, maxV) - minV) / (maxV - minV)) * innerH;
+
+  const stepX = points.length > 1 ? innerW / (points.length - 1) : 0;
+  const pts = points.map((p, i) => {
+    const x = PAD_L + i * stepX;
+    const y = yFor(p.value);
+    return [x, y, p] as const;
+  });
+  const path = pts.map(([x, y], i) => (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1)).join(' ');
+  const areaPath =
+    `${path} L${pts[pts.length - 1][0].toFixed(1)} ${(H - PAD_B).toFixed(1)} L${pts[0][0].toFixed(1)} ${(H - PAD_B).toFixed(1)} Z`;
+
+  const [hover, setHover] = useState<{ idx: number; x: number; y: number } | null>(null);
+
+  const onMove = (e: React.MouseEvent<SVGSVGElement>): void => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const vx = ((e.clientX - rect.left) / rect.width) * W;
+    if (vx < PAD_L || vx > W - PAD_R) { setHover(null); return; }
+    let bestIdx = 0; let bestDelta = Infinity;
+    for (let i = 0; i < pts.length; i++) {
+      const d = Math.abs(pts[i][0] - vx);
+      if (d < bestDelta) { bestDelta = d; bestIdx = i; }
+    }
+    setHover({ idx: bestIdx, x: pts[bestIdx][0], y: pts[bestIdx][1] });
+  };
+
+  const last = pts[pts.length - 1];
+  const lastValue = last[2].value;
+  // Higher VIX = stress, so colours invert vs F&G.
+  const lineColor =
+    lastValue >= 30 ? 'var(--down)' :
+    lastValue >= 20 ? 'var(--orange)' :
+                       'var(--up)';
+
+  return (
+    <div style={{ marginTop: 8, position: 'relative' }}>
+      <div className="wf-mini muted-2" style={{ marginBottom: 2 }}>
+        30-DAY TREND
+      </div>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        height={H}
+        preserveAspectRatio="none"
+        onMouseMove={onMove}
+        onMouseLeave={() => setHover(null)}
+        role="img"
+        aria-label="VIX 30-day trend"
+        style={{ cursor: 'crosshair' }}
+      >
+        {/* Zone bands */}
+        {VIX_ZONES.map((z) => {
+          // Cap each band's top at the current maxV so the EXTREME band
+          // doesn't extend off-chart when VIX is near 40 normally.
+          const top    = yFor(Math.min(z.hi - 1, maxV));
+          const bottom = yFor(z.lo);
+          const h = bottom - top;
+          if (h <= 0) return null;
+          return (
+            <g key={z.label}>
+              <rect
+                x={PAD_L} y={top}
+                width={innerW} height={h}
+                fill={z.fill}
+              />
+              {z.hi <= maxV && (
+                <line
+                  x1={PAD_L} x2={W - PAD_R}
+                  y1={top} y2={top}
+                  stroke="var(--hairline)"
+                  strokeDasharray="2 4"
+                  strokeWidth={0.5}
+                />
+              )}
+              <text
+                x={W - PAD_R + 4}
+                y={(top + bottom) / 2 + 3}
+                fontSize={7.5}
+                fontFamily="var(--font-mono)"
+                fill="var(--fg-3)"
+                letterSpacing="0.04em"
+              >
+                {z.label}
+              </text>
+            </g>
+          );
+        })}
+
+        <path d={areaPath} fill={lineColor} opacity={0.16} />
+        <path
+          d={path}
+          fill="none"
+          stroke={lineColor}
+          strokeWidth={1.4}
+          vectorEffect="non-scaling-stroke"
+        />
+
+        {/* Y-axis ticks at boundary values */}
+        {[0, 12, 20, 30, 40].filter((v) => v <= maxV).map((v) => (
+          <text
+            key={v}
+            x={W - PAD_R - 2}
+            y={yFor(v) + 3}
+            textAnchor="end"
+            fontSize={7}
+            fontFamily="var(--font-mono)"
+            fill="var(--fg-4)"
+          >
+            {v}
+          </text>
+        ))}
+
+        <text x={PAD_L} y={H - 4}
+          fontSize={8} fontFamily="var(--font-mono)" fill="var(--fg-4)"
+        >{points[0].date.slice(5)}</text>
+        <text x={W - PAD_R} y={H - 4}
+          textAnchor="end"
+          fontSize={8} fontFamily="var(--font-mono)" fill="var(--fg-4)"
+        >{points[points.length - 1].date.slice(5)}</text>
+
+        {hover && (
+          <>
+            <line
+              x1={hover.x} x2={hover.x}
+              y1={PAD_T} y2={H - PAD_B}
+              stroke="var(--fg-3)"
+              strokeDasharray="2 2"
+              strokeWidth={0.5}
+              pointerEvents="none"
+            />
+            <circle cx={hover.x} cy={hover.y} r={3} fill={lineColor} pointerEvents="none" />
+          </>
+        )}
+      </svg>
+      {hover && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: 'calc(' + (hover.x / W) * 100 + '%)',
+            transform: 'translateX(-50%)',
+            background: 'var(--panel-2)',
+            border: '1px solid var(--hairline)',
+            borderRadius: 3,
+            padding: '3px 7px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: 'var(--fg)',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            lineHeight: 1.4,
+          }}
+        >
+          <div>{points[hover.idx].date} · {points[hover.idx].value.toFixed(2)}</div>
+          <div className="muted" style={{ fontSize: 8 }}>
+            {vixZoneFor(points[hover.idx].value)}
           </div>
         </div>
       )}
