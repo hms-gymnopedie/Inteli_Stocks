@@ -118,6 +118,9 @@ export async function deleteStrategy(id: string): Promise<void> {
 
 export interface HoldingBreakdown {
   symbol:      string;
+  name:        string | null;
+  market:      string | null;
+  currency:    string | null;
   weight:      number;
   available:   boolean;
   firstClose:  number | null;

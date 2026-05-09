@@ -181,8 +181,11 @@ sim.put('/strategies/:id', async (req: Request, res: Response): Promise<void> =>
 
 interface HoldingBreakdown {
   symbol:      string;
-  weight:      number;            // 0-1
-  available:   boolean;            // false when no bars in window
+  name:        string | null;       // company / fund long name (yahoo)
+  market:      string | null;       // exchange label (yahoo fullExchangeName)
+  currency:    string | null;       // quote currency
+  weight:      number;               // 0-1
+  available:   boolean;              // false when no bars in window
   firstClose:  number | null;
   firstDate:   string | null;
   lastClose:   number | null;
@@ -190,6 +193,51 @@ interface HoldingBreakdown {
   returnPct:   number | null;
   daysHeld:    number | null;
   series:      { ts: number; value: number }[];  // normalized to start=100
+}
+
+/**
+ * Map yahoo's verbose `fullExchangeName` (e.g. "NasdaqGS", "Nasdaq Global
+ * Select Market") to a short, friendly market label that fits a table cell.
+ * Falls back to ticker-suffix detection for KR/JP/HK/EU when yahoo's field
+ * is missing.
+ */
+function formatMarket(symbol: string, fullExchangeName?: string | null): string {
+  const fx = (fullExchangeName ?? '').toLowerCase();
+  if (fx.includes('nasdaq'))                     return 'NASDAQ';
+  if (fx.includes('nyse') || fx === 'nyq')       return 'NYSE';
+  if (fx.includes('amex'))                       return 'AMEX';
+  if (fx.includes('cboe'))                       return 'CBOE';
+  if (fx.includes('arca'))                       return 'NYSE ARCA';
+  if (fx.includes('bats'))                       return 'BATS';
+  if (fx.includes('korea') || fx === 'kse')      return 'KOSPI';
+  if (fx === 'koe' || fx.includes('kosdaq'))     return 'KOSDAQ';
+  if (fx.includes('tokyo'))                      return 'TSE';
+  if (fx.includes('hong kong') || fx.includes('hkse')) return 'HKEX';
+  if (fx.includes('shanghai'))                   return 'SSE';
+  if (fx.includes('shenzhen'))                   return 'SZSE';
+  if (fx.includes('london'))                     return 'LSE';
+  if (fx.includes('toronto'))                    return 'TSX';
+  if (fx.includes('australian'))                 return 'ASX';
+  if (fx.includes('frankfurt') || fx.includes('xetra')) return 'XETRA';
+  if (fx.includes('paris'))                      return 'EPA';
+  if (fx.includes('amsterdam'))                  return 'AMS';
+  if (fullExchangeName && fullExchangeName.length <= 12) return fullExchangeName;
+
+  // Fallback: ticker-suffix detection.
+  const u = symbol.toUpperCase();
+  if (u.endsWith('.KS'))                  return 'KOSPI';
+  if (u.endsWith('.KQ'))                  return 'KOSDAQ';
+  if (u.endsWith('.T'))                   return 'TSE';
+  if (u.endsWith('.HK'))                  return 'HKEX';
+  if (u.endsWith('.SS'))                  return 'SSE';
+  if (u.endsWith('.SZ'))                  return 'SZSE';
+  if (u.endsWith('.L'))                   return 'LSE';
+  if (u.endsWith('.TO') || u.endsWith('.V')) return 'TSX';
+  if (u.endsWith('.AX'))                  return 'ASX';
+  if (u.endsWith('.DE'))                  return 'XETRA';
+  if (u.endsWith('.PA'))                  return 'EPA';
+  if (u.endsWith('.AS'))                  return 'AMS';
+  return fullExchangeName ?? '—';
 }
 
 sim.get('/strategies/:id/breakdown', async (req: Request, res: Response): Promise<void> => {
@@ -202,12 +250,33 @@ sim.get('/strategies/:id/breakdown', async (req: Request, res: Response): Promis
   const period1   = new Date(`${startDate}T12:00:00Z`);
   const period2   = new Date(`${endDate}T12:00:00Z`);
 
+  // Batch yahoo quotes once so each card can show the company name + market.
+  const symbols = s.allocations.map((a) => a.symbol);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const quotesArr = await fetchQuotes(symbols).catch(() => [] as any[]);
+  const quoteBySymbol = new Map<string, {
+    longName?: string; shortName?: string;
+    fullExchangeName?: string; currency?: string;
+  }>();
+  for (const q of quotesArr) {
+    if (q && typeof q === 'object' && typeof q.symbol === 'string') {
+      quoteBySymbol.set(q.symbol.toUpperCase(), q);
+    }
+  }
+
   const breakdowns: HoldingBreakdown[] = await Promise.all(
     s.allocations.map(async (a): Promise<HoldingBreakdown> => {
+      const q = quoteBySymbol.get(a.symbol.toUpperCase());
+      const name     = q?.longName ?? q?.shortName ?? null;
+      const market   = formatMarket(a.symbol, q?.fullExchangeName);
+      const currency = q?.currency ?? null;
+      const naBase = {
+        symbol: a.symbol, name, market, currency, weight: a.weight,
+      };
       try {
         const rows = await fetchHistoricalRange(a.symbol, period1, period2, '1d');
         if (!Array.isArray(rows) || rows.length === 0) {
-          return { symbol: a.symbol, weight: a.weight, available: false,
+          return { ...naBase, available: false,
                    firstClose: null, firstDate: null, lastClose: null,
                    lastDate: null, returnPct: null, daysHeld: null, series: [] };
         }
@@ -223,7 +292,7 @@ sim.get('/strategies/:id/breakdown', async (req: Request, res: Response): Promis
           closes.push({ ts: d.getTime(), close: c, date: d.toISOString().slice(0, 10) });
         }
         if (closes.length < 2) {
-          return { symbol: a.symbol, weight: a.weight, available: false,
+          return { ...naBase, available: false,
                    firstClose: null, firstDate: null, lastClose: null,
                    lastDate: null, returnPct: null, daysHeld: null, series: [] };
         }
@@ -238,8 +307,7 @@ sim.get('/strategies/:id/breakdown', async (req: Request, res: Response): Promis
           value: (p.close / first.close) * 100,
         }));
         return {
-          symbol:     a.symbol,
-          weight:     a.weight,
+          ...naBase,
           available:  true,
           firstClose: first.close,
           firstDate:  first.date,
@@ -250,7 +318,7 @@ sim.get('/strategies/:id/breakdown', async (req: Request, res: Response): Promis
           series,
         };
       } catch {
-        return { symbol: a.symbol, weight: a.weight, available: false,
+        return { ...naBase, available: false,
                  firstClose: null, firstDate: null, lastClose: null,
                  lastDate: null, returnPct: null, daysHeld: null, series: [] };
       }

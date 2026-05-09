@@ -3096,6 +3096,65 @@ svg [data-pin='true']:focus-visible {
   gap: 8px;
 }
 
+/* === Per-holding breakdown TABLE (replaces card grid) ================== */
+
+.lb-bd-tbl-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.lb-bd-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  min-width: 720px;
+}
+
+.lb-bd-tbl thead th {
+  text-align: left;
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  font-weight: 500;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--panel-2);
+  white-space: nowrap;
+}
+
+.lb-bd-tbl tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--hairline);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.lb-bd-tbl tbody tr:last-child td { border-bottom: 0; }
+.lb-bd-tbl tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
+
+.lb-bd-row-na td { opacity: 0.55; }
+
+.lb-bd-c-tkr  { font-weight: 600; width: 80px; }
+.lb-bd-c-name {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-2);
+}
+.lb-bd-c-mkt  { color: var(--fg-3); width: 70px; }
+.lb-bd-c-date { color: var(--fg-3); width: 96px; }
+.lb-bd-c-num  { text-align: right; }
+.lb-bd-c-spark {
+  width: 130px;
+  padding: 4px 10px;
+}
+.lb-bd-c-spark svg { display: block; }
+.lb-bd-ccy { font-size: 9.5px; margin-left: 2px; letter-spacing: 0.04em; }
+
 .lb-bd-card {
   border: 1px solid var(--hairline);
   border-radius: 4px;

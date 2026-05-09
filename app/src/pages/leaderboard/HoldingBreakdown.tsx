@@ -138,59 +138,57 @@ export function HoldingBreakdownPanel({ strategyId, strategyName, startDate, end
       {error   && <div className="lb-error" role="alert">{error}</div>}
 
       {data && (
-        <div className="lb-bd-grid">
-          {data.holdings.map((h) => (
-            <HoldingCard key={h.symbol} h={h} />
-          ))}
+        <div className="lb-bd-tbl-scroll">
+          <table className="lb-bd-tbl" aria-label="Per-holding breakdown">
+            <thead>
+              <tr>
+                <th className="lb-bd-c-tkr">Ticker</th>
+                <th className="lb-bd-c-name">Name</th>
+                <th className="lb-bd-c-mkt">Market</th>
+                <th className="lb-bd-c-date">Entry date</th>
+                <th className="lb-bd-c-num">Entry price</th>
+                <th className="lb-bd-c-num">Current price</th>
+                <th className="lb-bd-c-num">Return</th>
+                <th className="lb-bd-c-spark">Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.holdings.map((h) => (
+                <HoldingRow key={h.symbol} h={h} />
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
   );
 }
 
-// ─── One card per holding ──────────────────────────────────────────────────────
+// ─── One table row per holding ────────────────────────────────────────────────
 
-function HoldingCard({ h }: { h: HoldingBreakdown }) {
+function HoldingRow({ h }: { h: HoldingBreakdown }) {
   const positive = (h.returnPct ?? 0) >= 0;
+  const ccy = h.currency ?? 'USD';
+  const priceCell = (n: number | null) =>
+    n == null ? <span className="muted">—</span> : <>{fmtPrice(n)} <span className="muted lb-bd-ccy">{ccy}</span></>;
   return (
-    <div className={'lb-bd-card' + (h.available ? '' : ' lb-bd-card-na')}>
-      <div className="lb-bd-card-top">
-        <div className="lb-bd-symbol wf-mono">{h.symbol}</div>
-        <div className="lb-bd-weight wf-mini">{(h.weight * 100).toFixed(1)}%</div>
-      </div>
-      <div className="lb-bd-spark">
-        <Spark points={h.series} positive={positive} />
-      </div>
-      <div className="lb-bd-card-bottom">
-        <div className={'lb-bd-return wf-mono ' + (h.available
-          ? (positive ? 'up' : 'down')
-          : 'muted')}
-        >
-          {h.available ? fmtPct(h.returnPct) : 'no data'}
-        </div>
-        {h.available ? (
-          <table className="lb-bd-prices">
-            <tbody>
-              <tr>
-                <th scope="row" className="wf-label">Entry</th>
-                <td className="wf-mono">${fmtPrice(h.firstClose)}</td>
-                <td className="wf-mini muted">{h.firstDate ?? ''}</td>
-              </tr>
-              <tr>
-                <th scope="row" className="wf-label">Now</th>
-                <td className="wf-mono">${fmtPrice(h.lastClose)}</td>
-                <td className="wf-mini muted">
-                  {h.lastDate ?? ''}
-                  {h.daysHeld != null && <> · {h.daysHeld}d</>}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        ) : (
-          <div className="lb-bd-meta wf-mini muted">market closed on start date</div>
-        )}
-      </div>
-    </div>
+    <tr className={h.available ? '' : 'lb-bd-row-na'}>
+      <td className="wf-mono lb-bd-c-tkr">{h.symbol}</td>
+      <td className="lb-bd-c-name" title={h.name ?? ''}>{h.name ?? '—'}</td>
+      <td className="wf-mini lb-bd-c-mkt">{h.market ?? '—'}</td>
+      <td className="wf-mono lb-bd-c-date">{h.firstDate ?? '—'}</td>
+      <td className="wf-mono lb-bd-c-num">{priceCell(h.firstClose)}</td>
+      <td className="wf-mono lb-bd-c-num">{priceCell(h.lastClose)}</td>
+      <td className={
+        'wf-mono lb-bd-c-num ' +
+        (h.available ? (positive ? 'up' : 'down') : 'muted')
+      }>
+        {h.available ? fmtPct(h.returnPct) : 'no data'}
+      </td>
+      <td className="lb-bd-c-spark">
+        <Spark points={h.series} positive={positive} width={120} height={28} />
+      </td>
+    </tr>
   );
 }
 
