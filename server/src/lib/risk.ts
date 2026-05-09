@@ -44,8 +44,9 @@ export async function volatilityScore(symbol: string): Promise<number | null> {
     // Daily simple returns.
     const closes: number[] = [];
     for (const r of rows) {
-      const c = typeof r.close === 'number' ? r.close
-              : typeof r.adjClose === 'number' ? r.adjClose
+      // Prefer adjClose so split-day moves don't inflate volatility (B27-1).
+      const c = typeof r.adjClose === 'number' ? r.adjClose
+              : typeof r.close === 'number'    ? r.close
               : NaN;
       if (Number.isFinite(c)) closes.push(c);
     }

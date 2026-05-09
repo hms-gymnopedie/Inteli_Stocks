@@ -18,6 +18,7 @@ import {
   type Strategy,
 } from '../../data/strategies';
 import { EquityCurveChart, type ChartSeries } from './EquityCurveChart';
+import { HoldingBreakdownPanel } from './HoldingBreakdown';
 import { NewStrategyForm } from './NewStrategyForm';
 
 // ─── Color palette for the overlay chart ──────────────────────────────────────
@@ -313,6 +314,10 @@ export function Leaderboard() {
                               />
                             </div>
                           </div>
+                          <HoldingBreakdownPanel
+                            strategyId={s.id}
+                            strategyName={s.name}
+                          />
                         </td>
                       </tr>
                     )}

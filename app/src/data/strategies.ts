@@ -100,3 +100,59 @@ export async function deleteStrategy(id: string): Promise<void> {
     throw new Error(`failed to delete strategy: HTTP ${res.status}`);
   }
 }
+
+// ─── B27-2: Per-holding breakdown ────────────────────────────────────────────
+
+export interface HoldingBreakdown {
+  symbol:      string;
+  weight:      number;
+  available:   boolean;
+  firstClose:  number | null;
+  firstDate:   string | null;
+  lastClose:   number | null;
+  lastDate:    string | null;
+  returnPct:   number | null;
+  daysHeld:    number | null;
+  series:      EquityPoint[];
+}
+
+export interface StrategyBreakdown {
+  id:        string;
+  name:      string;
+  startDate: string;
+  endDate:   string;
+  holdings:  HoldingBreakdown[];
+}
+
+/** Fetch per-holding sparkline + cumulative return for a strategy. */
+export async function getStrategyBreakdown(id: string): Promise<StrategyBreakdown> {
+  return apiJson<StrategyBreakdown>(`/sim/strategies/${encodeURIComponent(id)}/breakdown`);
+}
+
+// ─── B27-3: Copy strategy to live portfolio ─────────────────────────────────
+
+export interface CopyResult {
+  ok:            boolean;
+  addedTrades:   number;
+  addedHoldings: number;
+  skipped:       number;
+  replaced:      boolean;
+}
+
+/**
+ * Replicate a backtested strategy as live trades + holdings.
+ * Each allocation is bought at its strategy-startDate close.
+ *  - amount:  total $ to deploy (default 100,000)
+ *  - replace: when true, wipes existing holdings/trades first
+ */
+export async function copyStrategyToPortfolio(
+  id: string,
+  amount: number,
+  replace: boolean,
+): Promise<CopyResult> {
+  return apiJson<CopyResult>(`/sim/strategies/${encodeURIComponent(id)}/copy-to-portfolio`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ amount, replace }),
+  });
+}

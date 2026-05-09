@@ -188,17 +188,27 @@ security.get('/:symbol/ohlc', async (req: Request, res: Response) => {
 
   try {
     const rows = await fetchHistorical(symbol, range);
+    // Prefer adjClose so the chart shows a continuous price line through
+    // splits (e.g. NVDA 10-for-1 in June 2024). Brokerages display the
+    // same way. Open/high/low are rescaled proportionally so the candle
+    // body stays consistent with close. (B27-1)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bars = (rows as any[])
       .filter((r) => r.open != null)
-      .map((r) => ({
-        ts:     (r.date as Date).getTime(),
-        open:   r.open as number,
-        high:   r.high as number,
-        low:    r.low as number,
-        close:  r.close as number,
-        volume: (r.volume as number | undefined) ?? 0,
-      }));
+      .map((r) => {
+        const rawClose = r.close as number;
+        const adjClose = typeof r.adjClose === 'number' ? r.adjClose : rawClose;
+        // Ratio of adj/raw — if no split or dividend in the window, ratio == 1.
+        const k = rawClose > 0 ? adjClose / rawClose : 1;
+        return {
+          ts:     (r.date as Date).getTime(),
+          open:   (r.open as number) * k,
+          high:   (r.high as number) * k,
+          low:    (r.low  as number) * k,
+          close:  adjClose,
+          volume: (r.volume as number | undefined) ?? 0,
+        };
+      });
     res.json(bars);
   } catch (err) {
     console.error('[security/ohlc]', symbol, err);

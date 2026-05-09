@@ -171,7 +171,7 @@ market.get('/intraday', async (req: Request, res: Response) => {
         open:   r.open as number,
         high:   r.high as number,
         low:    r.low as number,
-        close:  r.close as number,
+        close:  (typeof (r as { adjClose?: number }).adjClose === 'number' ? (r as { adjClose: number }).adjClose : (r.close as number)),
         volume: (r.volume as number | undefined) ?? 0,
       }));
     res.json(bars);

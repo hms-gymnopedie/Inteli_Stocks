@@ -129,8 +129,11 @@ async function fetchSeries(
     const series: DailyClose[] = [];
     for (const r of rows) {
       const ts    = (r.date instanceof Date ? r.date : new Date(r.date as unknown as string)).getTime();
-      const close = typeof r.close === 'number' ? r.close
-                  : typeof r.adjClose === 'number' ? r.adjClose
+      // Prefer adjClose so splits + dividends fold smoothly into the curve
+      // (B27-1) — raw close shows a 10× cliff on the day of e.g. NVDA's
+      // 10-for-1 split which would corrupt every metric downstream.
+      const close = typeof r.adjClose === 'number' ? r.adjClose
+                  : typeof r.close === 'number'    ? r.close
                   : NaN;
       if (!Number.isFinite(close) || !Number.isFinite(ts)) continue;
       // Yahoo includes a few bars outside the requested window — tolerate one

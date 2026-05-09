@@ -272,6 +272,10 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 - ✅ **B5-AU + B5-CR** — Supabase auth + portfolio sync (graceful degrade: local mode preserved). 13 commits. 34 E2E + 62 unit all green.
 - ✅ **B5-GS** — Google Sheets append-only 미러 (로컬 JSON이 source-of-truth). OAuth2 installed-app flow + 12-tab 누적 (8 portfolio + 4 AI). 모든 row에 `synced_at` (ISO8601 UTC) 첫 컬럼. AI 생성 결과(verdict/hedge/signals/insights)도 매 호출마다 자동 append (token usage 포함). Settings UI: Connect Google → Create/Link spreadsheet → Sync now. 매 `localStore.write()` 후 자동 미러 (실패 시 lastSyncError 기록만 하고 로컬 저장은 성공). 가드: GOOGLE_CLIENT_ID/SECRET 미설정 → 503, 토큰 없음 → 401, 시트 미선택 → 400.
 - ✅ **B8 (8/8)** — Portfolio CRUD endpoints (8 mutation handlers) + USD/KRW seed; Overview 4 fixes (Workspaces 클릭, HeroChart 동적 refetch, IndicesStrip→ETF 프록시, SectorHeatmap 50종목+섹터 라벨); AI Assistant 별도 탭 (`/ai-assistant`)에서 영역별 영속 history (~/.intelistock/ai-history.json, FIFO 50/area, 페이지별 카드 hydrate); 백테스트 엔진 + `/leaderboard` (buy-and-hold, SPY 벤치마크, equity overlay). 4 에이전트 dispatch (1개 실패해 main이 직접 처리). 21/21 visual + 13/13 functional E2E + 62/62 unit 통과.
+- ✅ **B27 (3/3)** — Stock-split & per-holding 시각화 + Copy-to-Portfolio.
+  - **B27-1**: Yahoo `adjClose` 우선 — `backtest.ts` / `factors.ts` / `risk.ts` / `routes/security.ts` `/ohlc` (OHL을 `adjClose/close` ratio로 스케일링) / `routes/market.ts` `/intraday`. NVDA 1Y 최대 1일 변동 7.87% (정상 어닝 day) — 분할 cliff 제거 검증.
+  - **B27-2**: `GET /api/sim/strategies/:id/breakdown` (per-holding `{symbol, weight, available, firstClose/firstDate, lastClose/lastDate, returnPct, daysHeld, series}`) + Leaderboard expanded row에 카드 그리드 (sparkline + 누적 수익률) — startDate에 장이 닫혀 있으면 "no data". HoldingBreakdown.tsx 신규.
+  - **B27-3**: `POST /api/sim/strategies/:id/copy-to-portfolio` (amount/replace) — startDate close에서 BUY 트레이드 + 홀딩 동시 생성. 가중치 × 총액 / 종가 = 수량. Currency = yahoo quote. Replace=false 시 동일 심볼 dedupe (전략 우선). `lb-copy-form` UI: amount input + replace 체크박스 + Confirm/Cancel.
 
 - ✅ **Phase 1 완료 (7/7)** — 두 라운드에 걸쳐 모두 완료:
   - B1-OV ✅ 9/9 · B1-PF ✅ 4/4 · B1-DT ✅ 7/7 · B1-GE ✅ 5/5

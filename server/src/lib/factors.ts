@@ -113,8 +113,10 @@ async function dailyReturns(symbol: string): Promise<number[]> {
     if (!Array.isArray(rows) || rows.length < 30) return [];
     const closes: number[] = [];
     for (const r of rows) {
-      const c = typeof r.close === 'number' ? r.close
-              : typeof r.adjClose === 'number' ? r.adjClose
+      // Prefer adjClose so split-day cliffs don't pollute return / σ
+      // calculations (B27-1).
+      const c = typeof r.adjClose === 'number' ? r.adjClose
+              : typeof r.close === 'number'    ? r.close
               : NaN;
       if (Number.isFinite(c)) closes.push(c);
     }
