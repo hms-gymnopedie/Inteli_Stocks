@@ -31,11 +31,20 @@ export interface CreateRationaleInput {
   triggers:   SellTrigger[];
 }
 
+import { cacheClear } from '../lib/cache';
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, init);
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`API ${init?.method ?? 'GET'} ${path} → ${res.status} ${text}`);
+  }
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    // Any rationale write feeds back into TradesLog / RecentTrades trigger
+    // badges + active rationales lists; clear the in-memory useAsync cache
+    // so a tab switch doesn't show pre-edit state. (B30-cache)
+    cacheClear();
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

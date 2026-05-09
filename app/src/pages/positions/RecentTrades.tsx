@@ -175,7 +175,7 @@ export function RecentTrades({ refreshKey, onRationaleChanged }: Props) {
           return (
             <div
               key={`${t.date}-${t.symbol}-${i}`}
-              className="dense-row"
+              className="dense-row dense-row-hover"
               role="button"
               tabIndex={0}
               onClick={() => setEditIdx(isEditing ? null : i)}

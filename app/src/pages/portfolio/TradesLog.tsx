@@ -283,7 +283,7 @@ export function TradesLog() {
               return (
                 <div
                   key={`${origIdx}-${t.date}-${t.symbol}`}
-                  className="dense-row"
+                  className="dense-row dense-row-hover"
                   style={{ gridTemplateColumns: GRID_TEMPLATE }}
                 >
                   <span className="muted">{t.date}</span>

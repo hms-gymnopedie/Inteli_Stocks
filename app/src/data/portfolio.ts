@@ -1,6 +1,7 @@
 // Portfolio fetchers — real fetch('/api/portfolio/...') calls (B2-MD swap).
 // Backing store: server reads/seeds from ~/.intelistock/portfolio.json.
 
+import { cacheClear } from '../lib/cache';
 import type {
   AllocationBy,
   AllocationSlice,
@@ -36,6 +37,12 @@ async function apiSend<T>(
     const detail = await res.text().catch(() => '');
     throw new Error(`API ${method} ${path} → ${res.status} ${detail}`);
   }
+  // Any successful mutation can shift summary / holdings / allocation /
+  // trades / watchlist / risk simultaneously, so blow the in-memory
+  // useAsync cache. Without this, deleting a holding looks reverted after
+  // a tab switch — the next mount rehydrates the prior data instantly.
+  // (B30-cache)
+  cacheClear();
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
@@ -118,6 +125,11 @@ export async function updateHolding(symbol: string, patch: Partial<Holding>): Pr
 /** Remove a holding by symbol (case-insensitive). */
 export async function deleteHolding(symbol: string): Promise<void> {
   await apiSend<void>(`/portfolio/holdings/${encodeURIComponent(symbol)}`, 'DELETE');
+}
+
+/** Wipe every holding in one call. Trades + summary stay intact. */
+export async function deleteAllHoldings(): Promise<{ deleted: number }> {
+  return apiSend<{ deleted: number }>('/portfolio/holdings', 'DELETE');
 }
 
 /** Patch top-level summary KPIs (NAV, day change, sharpe, etc.). */

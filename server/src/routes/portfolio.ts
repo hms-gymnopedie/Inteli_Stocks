@@ -738,6 +738,18 @@ portfolio.delete('/holdings/:symbol', (req: Request, res: Response): void => {
   });
 });
 
+/** Wipe every holding in one call. Trades + summary + watchlist preserved. */
+portfolio.delete('/holdings', (req: Request, res: Response): void => {
+  const store  = storeFor(req);
+  const userId = req.user?.id ?? null;
+  void store.read(userId).then(async (s) => {
+    const deleted = s.holdings.length;
+    s.holdings = [];
+    await store.write(userId, s);
+    res.json({ deleted });
+  });
+});
+
 // Summary ---------------------------------------------------------------------
 
 portfolio.patch('/summary', (req: Request, res: Response): void => {

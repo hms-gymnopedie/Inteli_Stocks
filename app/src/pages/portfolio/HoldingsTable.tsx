@@ -2,6 +2,7 @@ import { useMemo, useState, type CSSProperties } from 'react';
 
 import {
   addHolding,
+  deleteAllHoldings,
   deleteHolding,
   getHoldings,
 } from '../../data/portfolio';
@@ -98,6 +99,21 @@ export function HoldingsTable() {
     } finally { setBusy(false); }
   }
 
+  async function onDeleteAll() {
+    const n = data?.length ?? 0;
+    if (n === 0) return;
+    if (!window.confirm(
+      `Remove ALL ${n} holdings? This clears the holdings table only — your trades and summary stay intact.`,
+    )) return;
+    setBusy(true); setErr(null);
+    try {
+      await deleteAllHoldings();
+      setRefreshNonce((n2) => n2 + 1);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(false); }
+  }
+
   const filteredSorted = useMemo<Holding[]>(() => {
     if (!data) return [];
     const q = filter.trim().toLowerCase();
@@ -187,6 +203,22 @@ export function HoldingsTable() {
           >
             + ADD
           </button>
+          <button
+            type="button"
+            onClick={() => void onDeleteAll()}
+            disabled={busy || !data || data.length === 0}
+            className="tag"
+            style={{
+              background: 'transparent',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              color: 'var(--down)',
+              borderColor: 'rgba(226, 94, 94, 0.4)',
+            }}
+            title="Remove all holdings (trades and summary stay intact)"
+          >
+            ✕ CLEAR ALL
+          </button>
           <span className="tag">EXPORT</span>
         </div>
       </div>
@@ -254,7 +286,7 @@ export function HoldingsTable() {
           ? filteredSorted.map((r) => (
               <div
                 key={r.symbol}
-                className="dense-row"
+                className="dense-row dense-row-hover"
                 style={{ gridTemplateColumns: GRID_TEMPLATE }}
               >
                 <span className="ticker">{r.symbol}</span>

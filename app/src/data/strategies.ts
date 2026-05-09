@@ -47,6 +47,8 @@ export interface BacktestRequest {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+import { cacheClear } from '../lib/cache';
+
 interface ApiError { error: string }
 
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -61,6 +63,10 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(detail);
   }
+  // Strategy mutations + copy-to-portfolio bleed into other panels; flush
+  // the useAsync cache so navigations don't show stale data. (B30-cache)
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') cacheClear();
   return res.json() as Promise<T>;
 }
 

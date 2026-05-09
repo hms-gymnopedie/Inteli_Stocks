@@ -642,6 +642,18 @@ body {
 .dense-row:last-child { border-bottom: 0; }
 .dense-row .ticker { color: var(--fg); font-weight: 500; }
 
+/* Opt-in row hover for dense tables (Holdings, Trades). Skipping by default
+   so the variant is only applied where the visual cue actually helps —
+   header rows and inline forms keep their static background. (B30) */
+.dense-row-hover {
+  transition: background 80ms linear;
+}
+.dense-row-hover:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+.dense-row-hover:hover .muted   { color: var(--fg-2); }
+.dense-row-hover:hover .muted-2 { color: var(--fg-3); }
+
 .tag {
   display: inline-block;
   padding: 2px 7px;
