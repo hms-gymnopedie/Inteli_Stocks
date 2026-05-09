@@ -119,7 +119,13 @@ export function Positions() {
 
       {/* Recent trades */}
       <section className="settings-section settings-section--wide" style={{ marginBottom: 16 }}>
-        <RecentTrades refreshKey={refreshKey} />
+        <RecentTrades
+          refreshKey={refreshKey}
+          onRationaleChanged={() => {
+            setRefreshKey((n) => n + 1);
+            void refresh();
+          }}
+        />
       </section>
 
       {/* Closed / fired */}
