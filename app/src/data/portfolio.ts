@@ -94,6 +94,12 @@ export async function addTrade(t: Trade): Promise<Trade> {
   return apiSend<Trade>('/portfolio/trades', 'POST', t);
 }
 
+/** Replace the trade at the given array index. Server side-effect: BUY
+ *  trades auto-create a holding for the symbol if one doesn't exist. */
+export async function updateTrade(idx: number, t: Trade): Promise<Trade> {
+  return apiSend<Trade>(`/portfolio/trades/${idx}`, 'PUT', t);
+}
+
 /** Remove the trade at the given array index (0-based). */
 export async function deleteTrade(idx: number): Promise<void> {
   await apiSend<void>(`/portfolio/trades/${idx}`, 'DELETE');

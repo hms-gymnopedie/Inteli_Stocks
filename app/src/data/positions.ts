@@ -57,6 +57,25 @@ export async function deletePosition(id: string): Promise<void> {
   await api<void>(`/positions/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
+export interface UpdateRationaleInput {
+  reason?:     string;
+  entryPrice?: number;
+  triggers?:   SellTrigger[];
+}
+
+/** Patch reason / entryPrice / triggers on an existing rationale. Server
+ *  resets firedAt + notified so an edited rationale can fire again. */
+export async function updatePosition(
+  id: string,
+  patch: UpdateRationaleInput,
+): Promise<PositionRationale> {
+  return api<PositionRationale>(`/positions/${encodeURIComponent(id)}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(patch),
+  });
+}
+
 export interface CheckResult {
   ok: true;
   total: number;

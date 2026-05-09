@@ -571,6 +571,45 @@ function validWatchlistEntry(b: unknown): b is WatchlistEntry {
 
 // Trades ----------------------------------------------------------------------
 
+/**
+ * Side-effect: when a BUY trade is recorded, make sure the symbol shows up
+ * in the holdings list so Portfolio reflects it without a manual second
+ * step. Idempotent (no-op when symbol already tracked, or for SELL trades).
+ * Best-effort yahoo lookup to seed name + currency; falls back to symbol
+ * itself + USD when the quote fails so we never block the trade write.
+ */
+async function ensureHoldingForTrade(
+  store: { holdings: Holding[] },
+  trade: Trade,
+): Promise<boolean> {
+  if (trade.side !== 'BUY') return false;
+  const symU = trade.symbol.toUpperCase();
+  if (store.holdings.some((h) => h.symbol.toUpperCase() === symU)) return false;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q: any = null;
+  try {
+    const arr = await fetchQuotes([trade.symbol]);
+    q = Array.isArray(arr) ? arr[0] : arr;
+  } catch {
+    q = null;
+  }
+
+  const name = (q && (q.shortName ?? q.longName)) || trade.symbol;
+  const newHolding: Holding = {
+    symbol:    trade.symbol,
+    name:      String(name),
+    weight:    '0.0%',
+    price:     `$${trade.price.toFixed(2)}`,
+    dayPct:    '+0.00',
+    plPct:     '+0%',
+    sparkSeed: Math.floor(Math.random() * 1000),
+    risk:      3,
+  };
+  store.holdings = [...store.holdings, newHolding];
+  return true;
+}
+
 portfolio.post('/trades', (req: Request, res: Response): void => {
   if (!validTrade(req.body)) {
     res.status(400).json({ ok: false, reason: 'invalid_trade' });
@@ -579,9 +618,36 @@ portfolio.post('/trades', (req: Request, res: Response): void => {
   const store  = storeFor(req);
   const userId = req.user?.id ?? null;
   void store.read(userId).then(async (s) => {
-    s.trades = [req.body as Trade, ...s.trades];
+    const trade = req.body as Trade;
+    s.trades = [trade, ...s.trades];
+    await ensureHoldingForTrade(s, trade);
     await store.write(userId, s);
-    res.status(201).json(req.body);
+    res.status(201).json(trade);
+  });
+});
+
+portfolio.put('/trades/:idx', (req: Request, res: Response): void => {
+  const idx = Number(req.params.idx);
+  if (!Number.isInteger(idx) || idx < 0) {
+    res.status(400).json({ ok: false, reason: 'invalid_index' });
+    return;
+  }
+  if (!validTrade(req.body)) {
+    res.status(400).json({ ok: false, reason: 'invalid_trade' });
+    return;
+  }
+  const store  = storeFor(req);
+  const userId = req.user?.id ?? null;
+  void store.read(userId).then(async (s) => {
+    if (idx >= s.trades.length) {
+      res.status(404).json({ ok: false, reason: 'not_found' });
+      return;
+    }
+    const trade = req.body as Trade;
+    s.trades[idx] = trade;
+    await ensureHoldingForTrade(s, trade);
+    await store.write(userId, s);
+    res.json(trade);
   });
 });
 

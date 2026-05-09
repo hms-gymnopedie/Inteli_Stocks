@@ -130,6 +130,40 @@ export function deleteRationale(id: string): boolean {
   return removed;
 }
 
+/** Look up an active rationale by symbol (case-insensitive, latest wins). */
+export function findActiveBySymbol(symbol: string): PositionRationale | undefined {
+  const sym = symbol.toUpperCase();
+  const matches = load().rationales.filter(
+    (r) => r.symbol.toUpperCase() === sym && r.firedAt == null,
+  );
+  if (matches.length === 0) return undefined;
+  matches.sort((a, b) => b.createdAt - a.createdAt);
+  return matches[0];
+}
+
+/**
+ * Patch an existing rationale's reason / entryPrice / triggers. Resets
+ * firedAt + notified so an edited rationale can fire again under the new
+ * conditions. Returns the updated record, or null when id is unknown.
+ */
+export function updateRationale(
+  id: string,
+  patch: { reason?: string; entryPrice?: number; triggers?: SellTrigger[] },
+): PositionRationale | null {
+  const r = getRationale(id);
+  if (!r) return null;
+  if (typeof patch.reason === 'string')          r.reason     = patch.reason.trim();
+  if (typeof patch.entryPrice === 'number')      r.entryPrice = patch.entryPrice;
+  if (Array.isArray(patch.triggers))             r.triggers   = patch.triggers;
+  // The user just changed the conditions — re-arm so we can fire again
+  // and keep peakPrice consistent with the new entry.
+  r.firedAt      = null;
+  r.firedTrigger = null;
+  r.notified     = false;
+  persist();
+  return r;
+}
+
 export function markFired(id: string, trigger: SellTrigger): void {
   const r = getRationale(id);
   if (!r) return;

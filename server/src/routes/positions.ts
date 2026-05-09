@@ -14,7 +14,9 @@ import { Router, type Request, type Response } from 'express';
 import {
   addRationale,
   deleteRationale,
+  getRationale,
   listRationales,
+  updateRationale,
   type SellTrigger,
 } from '../storage/positions.js';
 import { evalPositions } from '../lib/positionEval.js';
@@ -71,6 +73,48 @@ positions.post('/', (req: Request, res: Response) => {
 
   const r = addRationale({ symbol, reason, entryPrice, triggers });
   res.status(201).json(r);
+});
+
+positions.put('/:id', (req: Request, res: Response): void => {
+  const id = String(req.params.id);
+  if (!getRationale(id)) {
+    res.status(404).json({ ok: false, reason: 'not_found' });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const patch: { reason?: string; entryPrice?: number; triggers?: SellTrigger[] } = {};
+
+  if ('reason' in body) {
+    if (typeof body.reason !== 'string' || !body.reason.trim()) {
+      res.status(400).json({ ok: false, reason: 'missing_reason' }); return;
+    }
+    patch.reason = body.reason;
+  }
+  if ('entryPrice' in body) {
+    if (typeof body.entryPrice !== 'number' || !Number.isFinite(body.entryPrice) || body.entryPrice <= 0) {
+      res.status(400).json({ ok: false, reason: 'missing_entryPrice' }); return;
+    }
+    patch.entryPrice = body.entryPrice;
+  }
+  if ('triggers' in body) {
+    if (!Array.isArray(body.triggers) || body.triggers.length === 0) {
+      res.status(400).json({ ok: false, reason: 'missing_triggers' }); return;
+    }
+    const triggers: SellTrigger[] = [];
+    for (const t of body.triggers) {
+      if (!isValidTrigger(t)) {
+        res.status(400).json({ ok: false, reason: 'invalid_trigger', detail: t });
+        return;
+      }
+      triggers.push(t);
+    }
+    patch.triggers = triggers;
+  }
+
+  const updated = updateRationale(id, patch);
+  if (!updated) { res.status(404).json({ ok: false, reason: 'not_found' }); return; }
+  res.json(updated);
 });
 
 positions.delete('/:id', (req: Request, res: Response) => {
