@@ -3145,6 +3145,37 @@ svg [data-pin='true']:focus-visible {
   font-size: 10.5px;
 }
 
+/* Two-row Entry / Now price table — keeps the start-date price visible
+   alongside the live price so a leaderboard reader can quickly judge
+   "what would I have paid". (B28-fix) */
+.lb-bd-prices {
+  border-collapse: collapse;
+  width: 100%;
+  margin-top: 1px;
+}
+.lb-bd-prices th,
+.lb-bd-prices td {
+  padding: 0;
+  text-align: left;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+.lb-bd-prices th {
+  font-size: 9.5px;
+  color: var(--fg-4);
+  letter-spacing: 0.06em;
+  width: 38px;
+  font-weight: 500;
+}
+.lb-bd-prices td:nth-child(2) {
+  font-size: 12px;
+  padding-right: 6px;
+}
+.lb-bd-prices td:nth-child(3) {
+  font-size: 10px;
+  text-align: right;
+}
+
 /* === Copy-to-Portfolio control (B27-3) ================================ */
 
 .lb-copy-wrap {

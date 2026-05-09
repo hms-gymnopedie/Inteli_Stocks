@@ -23,6 +23,9 @@ import {
 interface Props {
   strategyId:   string;
   strategyName: string;
+  /** Window passed from parent so an Edit (date change) refetches breakdown. */
+  startDate:    string;
+  endDate:      string;
 }
 
 // ─── Sparkline ─────────────────────────────────────────────────────────────────
@@ -83,11 +86,14 @@ function fmtPrice(n: number | null): string {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function HoldingBreakdownPanel({ strategyId, strategyName }: Props) {
+export function HoldingBreakdownPanel({ strategyId, strategyName, startDate, endDate }: Props) {
   const [data,    setData]    = useState<StrategyBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
 
+  // Window in deps so editing the strategy (PUT changes startDate / endDate)
+  // re-fetches the breakdown — without this, an open expanded row keeps
+  // showing the old per-holding series after a save.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -97,7 +103,7 @@ export function HoldingBreakdownPanel({ strategyId, strategyName }: Props) {
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [strategyId]);
+  }, [strategyId, startDate, endDate]);
 
   const summary = useMemo(() => {
     if (!data) return null;
@@ -163,15 +169,23 @@ function HoldingCard({ h }: { h: HoldingBreakdown }) {
           {h.available ? fmtPct(h.returnPct) : 'no data'}
         </div>
         {h.available ? (
-          <div className="lb-bd-meta wf-mini">
-            ${fmtPrice(h.firstClose)} → ${fmtPrice(h.lastClose)}
-            {h.daysHeld != null && (
-              <>
-                {' · '}
-                {h.daysHeld}d
-              </>
-            )}
-          </div>
+          <table className="lb-bd-prices">
+            <tbody>
+              <tr>
+                <th scope="row" className="wf-label">Entry</th>
+                <td className="wf-mono">${fmtPrice(h.firstClose)}</td>
+                <td className="wf-mini muted">{h.firstDate ?? ''}</td>
+              </tr>
+              <tr>
+                <th scope="row" className="wf-label">Now</th>
+                <td className="wf-mono">${fmtPrice(h.lastClose)}</td>
+                <td className="wf-mini muted">
+                  {h.lastDate ?? ''}
+                  {h.daysHeld != null && <> · {h.daysHeld}d</>}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         ) : (
           <div className="lb-bd-meta wf-mini muted">market closed on start date</div>
         )}

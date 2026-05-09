@@ -372,6 +372,8 @@ export function Leaderboard() {
                           <HoldingBreakdownPanel
                             strategyId={s.id}
                             strategyName={s.name}
+                            startDate={s.startDate}
+                            endDate={s.endDate}
                           />
                         </td>
                       </tr>
