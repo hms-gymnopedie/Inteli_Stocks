@@ -22,6 +22,7 @@ import {
   deleteStrategy,
   getStrategy,
   listStrategies,
+  updateStrategy,
   type Strategy,
 } from '../storage/strategies.js';
 import { fetchHistoricalRange, fetchQuotes } from '../providers/yahoo.js';
@@ -119,6 +120,61 @@ sim.delete('/strategies/:id', (req: Request, res: Response): void => {
   const ok = deleteStrategy(id);
   if (!ok) { res.status(404).json({ error: 'strategy not found' }); return; }
   res.status(204).end();
+});
+
+// ─── PUT /strategies/:id — re-run backtest + overwrite same record ──────────
+
+sim.put('/strategies/:id', async (req: Request, res: Response): Promise<void> => {
+  const id = String(req.params.id ?? '');
+  if (!getStrategy(id)) { res.status(404).json({ error: 'strategy not found' }); return; }
+
+  const body = (req.body ?? {}) as BacktestBody;
+  const name        = typeof body.name      === 'string' ? body.name.trim()      : '';
+  const startDate   = typeof body.startDate === 'string' ? body.startDate.trim() : '';
+  const endDate     = typeof body.endDate   === 'string' ? body.endDate.trim()   : undefined;
+  const allocations = Array.isArray(body.allocations) ? body.allocations : null;
+
+  if (!name)                     { badRequest(res, 'name is required'); return; }
+  if (!startDate)                { badRequest(res, 'startDate is required (YYYY-MM-DD)'); return; }
+  if (!allocations || allocations.length === 0) {
+    badRequest(res, 'allocations is required (non-empty array of {symbol, weight})');
+    return;
+  }
+
+  const shaped = [];
+  for (const a of allocations) {
+    if (typeof a !== 'object' || a === null) {
+      badRequest(res, 'each allocation must be an object {symbol, weight}'); return;
+    }
+    const obj = a as { symbol?: unknown; weight?: unknown };
+    if (typeof obj.symbol !== 'string' || obj.symbol.trim() === '') {
+      badRequest(res, 'each allocation must have a non-empty symbol string'); return;
+    }
+    const w = typeof obj.weight === 'number' ? obj.weight : Number(obj.weight);
+    if (!Number.isFinite(w) || w <= 0) {
+      badRequest(res, `weight for ${obj.symbol} must be a positive number`); return;
+    }
+    shaped.push({ symbol: obj.symbol.trim().toUpperCase(), weight: w });
+  }
+
+  try {
+    const result = await runBacktest({ allocations: shaped, startDate, endDate });
+    const updated = updateStrategy(id, {
+      name,
+      allocations:           result.allocations,
+      startDate:             result.startDate,
+      endDate:               result.endDate,
+      metrics:               result.metrics,
+      equityCurve:           result.equityCurve,
+      benchmarkMetrics:      result.benchmarkMetrics,
+      benchmarkEquityCurve:  result.benchmarkEquityCurve,
+    });
+    if (!updated) { res.status(404).json({ error: 'strategy not found' }); return; }
+    res.json(updated);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(400).json({ error: msg });
+  }
 });
 
 // ─── GET /strategies/:id/breakdown — per-holding sparklines + return ────────

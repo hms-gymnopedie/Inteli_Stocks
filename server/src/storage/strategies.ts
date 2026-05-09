@@ -133,6 +133,29 @@ export function deleteStrategy(id: string): boolean {
   return true;
 }
 
+/**
+ * Replace an existing strategy's allocations / dates / metrics in place.
+ * Preserves the original id + createdAt so leaderboard ordering and any
+ * external references (Sheets row, AI history) stay stable.
+ * Returns the updated record, or null if no row matched.
+ */
+export function updateStrategy(
+  id: string,
+  patch: Omit<Strategy, 'id' | 'createdAt'>,
+): Strategy | null {
+  const file = readFile();
+  const idx = file.strategies.findIndex((s) => s.id === id);
+  if (idx === -1) return null;
+  const merged: Strategy = {
+    ...patch,
+    id,
+    createdAt: file.strategies[idx].createdAt,
+  };
+  file.strategies[idx] = merged;
+  writeFile(file);
+  return merged;
+}
+
 export function clearAll(): void {
   writeFile({ strategies: [] });
 }

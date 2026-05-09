@@ -14,6 +14,7 @@ import {
   deleteStrategy as apiDeleteStrategy,
   listStrategies,
   runBacktest,
+  updateStrategy as apiUpdateStrategy,
   type BacktestRequest,
   type Strategy,
 } from '../../data/strategies';
@@ -70,11 +71,17 @@ function shortAllocations(allocs: Strategy['allocations']): string {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+// Form modes: closed, creating a new one, or editing an existing strategy by id.
+type FormMode =
+  | { kind: 'closed' }
+  | { kind: 'create' }
+  | { kind: 'edit'; strategyId: string };
+
 export function Leaderboard() {
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
-  const [showForm,   setShowForm]   = useState(false);
+  const [formMode,   setFormMode]   = useState<FormMode>({ kind: 'closed' });
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // Visibility set: strategy ids included in the overlay chart. Default-on
   // for every strategy; user can toggle via checkbox in the legend.
@@ -113,6 +120,20 @@ export function Leaderboard() {
     [],
   );
 
+  const onSubmitEdit = useCallback(
+    (id: string) =>
+      async (req: BacktestRequest): Promise<Strategy> => {
+        const updated = await apiUpdateStrategy(id, req);
+        setStrategies((prev) =>
+          prev
+            .map((s) => (s.id === id ? updated : s))
+            .sort((a, b) => b.metrics.totalReturnPct - a.metrics.totalReturnPct),
+        );
+        return updated;
+      },
+    [],
+  );
+
   const toggleVisible = useCallback((id: string) => {
     setVisible((prev) => {
       const next = new Set(prev);
@@ -125,14 +146,16 @@ export function Leaderboard() {
     const prev = strategies;
     setStrategies((s) => s.filter((x) => x.id !== id));
     if (expandedId === id) setExpandedId(null);
+    if (formMode.kind === 'edit' && formMode.strategyId === id) {
+      setFormMode({ kind: 'closed' });
+    }
     try {
       await apiDeleteStrategy(id);
     } catch (e) {
-      // Roll back on failure.
       setStrategies(prev);
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [strategies, expandedId]);
+  }, [strategies, expandedId, formMode]);
 
   // Combined overlay: every strategy by default, toggleable via checkboxes.
   // Color index is locked to leaderboard rank so the legend swatch matches
@@ -173,10 +196,12 @@ export function Leaderboard() {
         <button
           type="button"
           className="lb-btn lb-btn-primary"
-          onClick={() => setShowForm((v) => !v)}
-          aria-expanded={showForm}
+          onClick={() =>
+            setFormMode((m) => (m.kind === 'create' ? { kind: 'closed' } : { kind: 'create' }))
+          }
+          aria-expanded={formMode.kind === 'create'}
         >
-          {showForm ? '× Cancel' : '+ New Strategy'}
+          {formMode.kind === 'create' ? '× Cancel' : '+ New Strategy'}
         </button>
         <span className="wf-mini lb-toolbar-count">
           {loading
@@ -185,12 +210,24 @@ export function Leaderboard() {
         </span>
       </div>
 
-      {showForm && (
+      {formMode.kind === 'create' && (
         <NewStrategyForm
           onSubmit={onSubmitBacktest}
-          onClose={() => setShowForm(false)}
+          onClose={() => setFormMode({ kind: 'closed' })}
         />
       )}
+      {formMode.kind === 'edit' && (() => {
+        const target = strategies.find((s) => s.id === formMode.strategyId);
+        if (!target) return null;
+        return (
+          <NewStrategyForm
+            key={`edit-${target.id}`}
+            initial={target}
+            onSubmit={onSubmitEdit(target.id)}
+            onClose={() => setFormMode({ kind: 'closed' })}
+          />
+        );
+      })()}
 
       {error && (
         <div className="lb-error" role="alert">
@@ -263,6 +300,24 @@ export function Leaderboard() {
                       </td>
                       <td className="lb-td-num wf-mono muted">{fmtDate(s.createdAt)}</td>
                       <td className="lb-td-action">
+                        <button
+                          type="button"
+                          className="lb-row-edit"
+                          aria-label={`Edit ${s.name}`}
+                          title={`Edit ${s.name}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setFormMode({ kind: 'edit', strategyId: s.id });
+                            // Scroll the form into view so the user sees it.
+                            setTimeout(() => {
+                              document
+                                .querySelector('.lb-form')
+                                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }, 0);
+                          }}
+                        >
+                          ✎
+                        </button>
                         <button
                           type="button"
                           className="lb-row-delete"

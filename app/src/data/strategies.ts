@@ -81,6 +81,19 @@ export async function runBacktest(req: BacktestRequest): Promise<Strategy> {
   });
 }
 
+/**
+ * Re-run a backtest for an existing strategy and overwrite the stored
+ * record with the new parameters + freshly computed metrics. Preserves
+ * the original id and createdAt so leaderboard ordering stays stable.
+ */
+export async function updateStrategy(id: string, req: BacktestRequest): Promise<Strategy> {
+  return apiJson<Strategy>(`/sim/strategies/${encodeURIComponent(id)}`, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(req),
+  });
+}
+
 /** List all persisted strategies, sorted by total return descending. */
 export async function listStrategies(): Promise<Strategy[]> {
   return apiJson<Strategy[]>('/sim/strategies');

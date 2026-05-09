@@ -19,6 +19,8 @@ import type { Allocation, BacktestRequest, Strategy } from '../../data/strategie
 interface Props {
   onSubmit: (req: BacktestRequest) => Promise<Strategy>;
   onClose:  () => void;
+  /** When provided, the form runs in "edit" mode: prefilled inputs, "Save changes" button. */
+  initial?: Strategy;
 }
 
 interface Row {
@@ -49,11 +51,29 @@ function defaultStartDate(): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function NewStrategyForm({ onSubmit, onClose }: Props) {
-  const [name,        setName]        = useState('');
-  const [rows,        setRows]        = useState<Row[]>(PRESET);
-  const [startDate,   setStartDate]   = useState(defaultStartDate());
-  const [endDate,     setEndDate]     = useState('');
+export function NewStrategyForm({ onSubmit, onClose, initial }: Props) {
+  const isEdit = initial != null;
+  // Prefill from initial strategy when editing — `name` lookups for
+  // allocations stay blank (the user already chose them; we render the
+  // ticker badge directly).
+  const [name,        setName]        = useState(initial?.name ?? '');
+  const [rows,        setRows]        = useState<Row[]>(() =>
+    initial
+      ? initial.allocations.map((a) => ({
+          key:    newKey(),
+          symbol: a.symbol,
+          name:   a.symbol,
+          query:  '',
+          weight: a.weight,
+        }))
+      : PRESET,
+  );
+  const [startDate,   setStartDate]   = useState(initial?.startDate ?? defaultStartDate());
+  const [endDate,     setEndDate]     = useState(
+    initial?.endDate && initial.endDate !== new Date().toISOString().slice(0, 10)
+      ? initial.endDate
+      : '',
+  );
   const [submitting,  setSubmitting]  = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -126,9 +146,13 @@ export function NewStrategyForm({ onSubmit, onClose }: Props) {
   }
 
   return (
-    <form className="lb-form wf-panel" onSubmit={handleSubmit} aria-label="New strategy">
+    <form
+      className="lb-form wf-panel"
+      onSubmit={handleSubmit}
+      aria-label={isEdit ? `Edit strategy ${initial?.name ?? ''}` : 'New strategy'}
+    >
       <div className="lb-form-header">
-        <h2 className="lb-form-title">New Strategy</h2>
+        <h2 className="lb-form-title">{isEdit ? `Edit · ${initial?.name}` : 'New Strategy'}</h2>
         <button
           type="button"
           className="lb-form-close"
@@ -240,7 +264,9 @@ export function NewStrategyForm({ onSubmit, onClose }: Props) {
           disabled={!canSubmit}
           aria-busy={submitting}
         >
-          {submitting ? 'Running…' : 'Run backtest'}
+          {submitting
+            ? (isEdit ? 'Saving…' : 'Running…')
+            : (isEdit ? 'Save changes' : 'Run backtest')}
         </button>
       </div>
     </form>

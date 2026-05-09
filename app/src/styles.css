@@ -2982,8 +2982,12 @@ svg [data-pin='true']:focus-visible {
 .lb-td-num    { text-align: right; }
 .lb-th-rank   { width: 36px; text-align: center; }
 .lb-td-rank   { text-align: center; color: var(--fg-3); }
-.lb-th-action { width: 36px; }
-.lb-td-action { width: 36px; text-align: center; }
+.lb-th-action { width: 64px; }
+.lb-td-action {
+  width: 64px;
+  text-align: center;
+  white-space: nowrap;
+}
 
 .lb-row {
   cursor: pointer;
@@ -3015,7 +3019,8 @@ svg [data-pin='true']:focus-visible {
   color: var(--fg-3);
 }
 
-.lb-row-delete {
+.lb-row-delete,
+.lb-row-edit {
   background: transparent;
   border: 0;
   color: var(--fg-4);
@@ -3029,6 +3034,11 @@ svg [data-pin='true']:focus-visible {
   color: var(--down);
   background: rgba(226, 94, 94, 0.1);
 }
+.lb-row-edit:hover {
+  color: var(--orange);
+  background: rgba(232, 134, 0, 0.12);
+}
+.lb-row-edit { margin-right: 2px; }
 
 .lb-row-detail td {
   background: var(--bg);
