@@ -1,14 +1,87 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { getAIHistory, proposeHedge } from '../../data/ai';
+import type { HedgeInput } from '../../data/ai';
 import type { HistoryEntry } from '../../data/aiHistoryTypes';
-import type { AIMeta, AIResponse, HedgeProposal } from '../../data/types';
+import { getHotspots } from '../../data/geo';
+import { getHoldings } from '../../data/portfolio';
+import type { AIMeta, AIResponse, HedgeProposal, Holding, RiskHotspot } from '../../data/types';
 import { AITokenFooter } from '../../lib/AITokenFooter';
 import { formatTime } from '../../lib/format';
 import { useTweaks } from '../../lib/tweaks';
 import { useOnDemand } from '../../lib/useOnDemand';
 
-const EXPOSURE = 'semis-heavy portfolio with TSM 6.4% in Taiwan-tension';
+// Legacy fallback string used when /api/portfolio/holdings or /api/geo/state
+// fail to load — keeps the proposal generic but still useful.
+const FALLBACK_EXPOSURE =
+  'semis-heavy portfolio with TSM 6.4% in Taiwan-tension';
+
+interface BuiltContext {
+  payload: string | HedgeInput;
+  label:   string; // one-line "context: …" status hint
+}
+
+/** Build the structured `proposeHedge` payload from holdings + hotspots,
+ *  or fall back to the legacy string form if either source errors. */
+async function buildHedgeContext(): Promise<BuiltContext> {
+  const [holdingsRes, hotspotsRes] = await Promise.allSettled([
+    getHoldings(),
+    getHotspots(),
+  ]);
+
+  if (
+    holdingsRes.status !== 'fulfilled' ||
+    hotspotsRes.status !== 'fulfilled'
+  ) {
+    return {
+      payload: FALLBACK_EXPOSURE,
+      label:   "context: fallback (couldn't load holdings or hotspots)",
+    };
+  }
+
+  const allHoldings: Holding[] = Array.isArray(holdingsRes.value) ? holdingsRes.value : [];
+  const allHotspots: RiskHotspot[] = Array.isArray(hotspotsRes.value) ? hotspotsRes.value : [];
+
+  // Top 10 by parsed weight (mirrors AffectedPortfolio's parseFloat pattern).
+  const top10 = [...allHoldings]
+    .sort((a, b) => parseFloat(b.weight) - parseFloat(a.weight))
+    .slice(0, 10);
+
+  const holdings = top10.map((h) => ({
+    symbol: h.symbol,
+    weight: h.weight,
+    name:   h.name,
+  }));
+
+  const hotspots = allHotspots.map((h) => ({
+    name:    h.name,
+    level:   h.level,
+    impact:  h.impact,
+    tickers: h.tickers,
+  }));
+
+  // One-line exposure summary so the model has a quick read even before
+  // it walks the structured arrays.
+  const top = top10[0];
+  const topClause = top
+    ? `top weight ${top.weight.trim()} ${top.symbol}`
+    : 'no holdings on file';
+  const hotspotClause =
+    hotspots.length > 0
+      ? `Active hotspots: ${hotspots
+          .map((h) => {
+            const region = h.name.split(/\s+/)[0] ?? h.name;
+            return `${region} (${h.level})`;
+          })
+          .join(', ')}`
+      : 'No active hotspots';
+  const exposure = `${holdings.length} holdings, ${topClause}. ${hotspotClause}`;
+
+  return {
+    payload: { exposure, holdings, hotspots },
+    label:   `context: ${holdings.length} holdings · ${hotspots.length} hotspots`,
+  };
+}
 
 export function AIHedgeSuggestion() {
   const { values } = useTweaks();
@@ -61,7 +134,35 @@ interface InnerProps {
 }
 
 function Inner({ initial, tz, tzAbbrev, loadingHistory }: InnerProps) {
-  const hedge = useOnDemand<AIResponse<HedgeProposal>>(() => proposeHedge(EXPOSURE), initial);
+  // Build the real exposure context from the user's book + active hotspots.
+  // On any failure we fall back to the legacy string so the proposal flow
+  // still works without a portfolio or geo backend.
+  const [context, setContext] = useState<BuiltContext>({
+    payload: FALLBACK_EXPOSURE,
+    label:   'context: loading…',
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    buildHedgeContext()
+      .then((c) => {
+        if (!cancelled) setContext(c);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setContext({
+            payload: FALLBACK_EXPOSURE,
+            label:   "context: fallback (couldn't load holdings or hotspots)",
+          });
+        }
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const hedge = useOnDemand<AIResponse<HedgeProposal>>(
+    () => proposeHedge(context.payload),
+    initial,
+  );
   const result = hedge.data?.data;
   const meta = hedge.data?.meta ?? null;
   const dimmed = !result ? { opacity: 0.5 } : undefined;
@@ -83,6 +184,10 @@ function Inner({ initial, tz, tzAbbrev, loadingHistory }: InnerProps) {
         ) : (
           <span className="ai-badge idle">Idle</span>
         )}
+      </div>
+
+      <div className="wf-mini muted-2" style={{ marginTop: 4 }}>
+        {context.label}
       </div>
 
       <div className="row" style={{ marginTop: 8, gap: 6 }}>

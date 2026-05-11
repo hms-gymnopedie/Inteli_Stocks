@@ -587,8 +587,63 @@ export function WorldMap({
             })}
           </g>
 
-          {/* Trade flow lines */}
+          {/* Trade flow lines — level-aware (B31-3).
+              Level 1/undefined = watch, 2 = tension, 3 = crisis. Each level
+              renders with its own stroke/width/dash + arrowhead marker. A
+              keyframes animation slides stroke-dashoffset so flows feel
+              directional ("flowing"). */}
           <g>
+            <defs>
+              {/* Per-level arrowheads. `orient="auto"` rotates the marker to
+                  match the path tangent at its endpoint, so the arrow always
+                  points from `from` → `to`. `markerUnits="strokeWidth"` keeps
+                  arrowheads visually proportional to each level's stroke. */}
+              <marker
+                id="flow-arrow-1"
+                viewBox="0 0 10 10"
+                refX={9}
+                refY={5}
+                markerWidth={6}
+                markerHeight={6}
+                orient="auto-start-reverse"
+                markerUnits="strokeWidth"
+              >
+                <path d="M0,0 L10,5 L0,10 z" fill="rgba(232,112,42,0.45)" />
+              </marker>
+              <marker
+                id="flow-arrow-2"
+                viewBox="0 0 10 10"
+                refX={9}
+                refY={5}
+                markerWidth={6}
+                markerHeight={6}
+                orient="auto-start-reverse"
+                markerUnits="strokeWidth"
+              >
+                <path d="M0,0 L10,5 L0,10 z" fill="rgba(232,112,42,0.65)" />
+              </marker>
+              <marker
+                id="flow-arrow-3"
+                viewBox="0 0 10 10"
+                refX={9}
+                refY={5}
+                markerWidth={6}
+                markerHeight={6}
+                orient="auto-start-reverse"
+                markerUnits="strokeWidth"
+              >
+                <path d="M0,0 L10,5 L0,10 z" fill="rgba(226,94,94,0.85)" />
+              </marker>
+            </defs>
+            <style>{`
+              @keyframes worldmap-flow-dash {
+                from { stroke-dashoffset: 0; }
+                to   { stroke-dashoffset: -28; }
+              }
+              .worldmap-flow {
+                animation: worldmap-flow-dash 2.5s linear infinite;
+              }
+            `}</style>
             {flows.map((f, i) => {
               const geo = isGeographic(f);
               const a = geo ? projection([f[0], f[1]]) : [f[0], f[1]];
@@ -596,14 +651,34 @@ export function WorldMap({
               if (!a || !b) return null;
               const mx = (a[0] + b[0]) / 2;
               const my = (a[1] + b[1]) / 2 - 50;
+              // Defensive: 4-tuple flows have no `f[4]`; non-number values
+              // (somehow) fall through to the level-1 default.
+              const level = typeof f[4] === 'number' ? f[4] : undefined;
+              let stroke = 'rgba(232,112,42,0.45)';
+              let width = 1;
+              let dash = '3 4';
+              let markerId = 'flow-arrow-1';
+              if (level === 2) {
+                stroke = 'rgba(232,112,42,0.65)';
+                width = 1.4;
+                dash = '4 5';
+                markerId = 'flow-arrow-2';
+              } else if (level === 3) {
+                stroke = 'rgba(226,94,94,0.85)';
+                width = 1.8;
+                dash = '5 6';
+                markerId = 'flow-arrow-3';
+              }
               return (
                 <path
                   key={i}
+                  className="worldmap-flow"
                   d={`M ${a[0]} ${a[1]} Q ${mx} ${my}, ${b[0]} ${b[1]}`}
-                  stroke="rgba(232, 112, 42, 0.5)"
-                  strokeWidth={1}
+                  stroke={stroke}
+                  strokeWidth={width}
                   fill="none"
-                  strokeDasharray="3 4"
+                  strokeDasharray={dash}
+                  markerEnd={`url(#${markerId})`}
                 />
               );
             })}

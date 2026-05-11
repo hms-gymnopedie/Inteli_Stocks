@@ -1,9 +1,66 @@
-import { getGlobalIndex } from '../../data/geo';
-import type { GlobalRiskIndex as GlobalRiskIndexData } from '../../data/types';
+import { useCallback, useState } from 'react';
+import { getGlobalIndex, getIndexTrail } from '../../data/geo';
+import type {
+  GeoIndexSnapshot,
+  GeoIndexTrail,
+  GlobalRiskIndex as GlobalRiskIndexData,
+} from '../../data/types';
 import { useAsync } from '../../lib/useAsync';
+
+type TrailRange = '1D' | '1W' | '1M';
+
+const RANGES: TrailRange[] = ['1D', '1W', '1M'];
+
+// Small inline sparkline. Mirrors the Spark pattern in
+// pages/leaderboard/HoldingBreakdown.tsx — pure SVG, no chart libs.
+function Spark({
+  points,
+  width = 100,
+  height = 24,
+}: {
+  points: GeoIndexSnapshot[];
+  width?: number;
+  height?: number;
+}) {
+  if (!points || points.length < 2) {
+    return (
+      <div className="wf-mini" style={{ width, height, lineHeight: `${height}px` }}>
+        Building history…
+      </div>
+    );
+  }
+  const ys = points.map((p) => p.value);
+  const yMin = Math.min(...ys);
+  const yMax = Math.max(...ys);
+  const yR = yMax - yMin || 1;
+  const xR = points.length - 1 || 1;
+  const path = points
+    .map((p, i) => {
+      const x = (i / xR) * width;
+      const y = height - ((p.value - yMin) / yR) * height;
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(' ');
+  return (
+    <svg width={width} height={height} aria-hidden>
+      <path
+        d={path}
+        fill="none"
+        stroke="var(--orange)"
+        strokeWidth={1.4}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 export function GlobalRiskIndex() {
   const { data, loading } = useAsync<GlobalRiskIndexData>(getGlobalIndex, []);
+
+  const [range, setRange] = useState<TrailRange>('1W');
+  const fetchTrail = useCallback(() => getIndexTrail(range), [range]);
+  const { data: trail } = useAsync<GeoIndexTrail>(fetchTrail, [range]);
 
   return (
     <div
@@ -45,6 +102,27 @@ export function GlobalRiskIndex() {
               ? `${data.delta >= 0 ? '+' : '−'}${Math.abs(data.delta)} ${data.period}`
               : '—'}
           </div>
+          <div
+            style={{ display: 'flex', gap: 4, marginLeft: 4 }}
+            role="tablist"
+            aria-label="Risk index trail range"
+          >
+            {RANGES.map((r) => (
+              <button
+                key={r}
+                type="button"
+                role="tab"
+                aria-selected={range === r}
+                className={'chip' + (range === r ? ' active' : '')}
+                onClick={() => setRange(r)}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop: 2 }}>
+          <Spark points={trail?.snapshots ?? []} />
         </div>
         <div className="wf-mini">{data ? data.note : '—'}</div>
       </div>

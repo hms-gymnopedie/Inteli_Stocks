@@ -199,29 +199,82 @@ export function RegionDrawer({ pin, onClose }: RegionDrawerProps) {
                 gap: 4,
               }}
             >
-              {(detail?.etfs ?? []).map((etf) => (
-                <div
-                  key={etf.symbol}
-                  className="dense-row"
-                  style={{
-                    gridTemplateColumns: '1fr 70px',
-                    border: '1px solid var(--hairline)',
-                    borderRadius: 4,
-                    padding: '6px 10px',
-                  }}
-                >
-                  <span className="ticker">{etf.symbol}</span>
-                  <span
+              {(detail?.etfs ?? []).map((etf) => {
+                // Direction falls back to dayPct sign when the server omitted
+                // it (e.g. for non-yahoo proxies). Accepts both ASCII '-' and
+                // typographic minus (U+2212).
+                const trimmed = etf.dayPct.trim();
+                const dir: 1 | -1 = etf.direction
+                  ? etf.direction
+                  : trimmed.startsWith('-') || trimmed.startsWith('−')
+                    ? -1
+                    : 1;
+                const changeColor =
+                  dir > 0 ? 'var(--up)' : 'var(--down)';
+                const priceLabel =
+                  typeof etf.price === 'number' && etf.currency
+                    ? `${formatPriceForCurrency(etf.price, etf.currency)} ${etf.currency.toUpperCase()}`
+                    : typeof etf.price === 'number'
+                      ? formatPriceForCurrency(etf.price, 'USD')
+                      : '—';
+                return (
+                  <div
+                    key={etf.symbol}
+                    className="dense-row"
                     style={{
-                      textAlign: 'right',
-                      color:
-                        etf.direction > 0 ? 'var(--up)' : 'var(--down)',
+                      gridTemplateColumns: 'minmax(0, 1fr) auto 64px',
+                      gap: 10,
+                      alignItems: 'center',
+                      border: '1px solid var(--hairline)',
+                      borderRadius: 4,
+                      padding: '6px 10px',
                     }}
                   >
-                    {etf.dayPct}
-                  </span>
-                </div>
-              ))}
+                    <div className="col" style={{ minWidth: 0 }}>
+                      <span
+                        className="ticker"
+                        style={{ fontWeight: 600 }}
+                      >
+                        {etf.symbol}
+                      </span>
+                      {etf.name && (
+                        <span
+                          className="wf-mini muted"
+                          style={{
+                            fontSize: 10,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            marginTop: 1,
+                          }}
+                          title={etf.name}
+                        >
+                          {etf.name}
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className="wf-mono"
+                      style={{
+                        fontSize: 11,
+                        color: 'var(--fg-2)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {priceLabel}
+                    </span>
+                    <span
+                      style={{
+                        textAlign: 'right',
+                        color: changeColor,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {etf.dayPct}
+                    </span>
+                  </div>
+                );
+              })}
               {!loading && detail && detail.etfs.length === 0 && (
                 <div className="wf-mini muted">No related ETFs.</div>
               )}
@@ -231,4 +284,23 @@ export function RegionDrawer({ pin, onClose }: RegionDrawerProps) {
       </aside>
     </>
   );
+}
+
+/**
+ * Mirror of `server/src/routes/portfolio.ts` `formatPriceForCurrency`:
+ * KRW / JPY → integer with ₩ / ¥ glyph + thousand separators.
+ * Otherwise → 2-decimal with $ / € / £ / HK$ glyph.
+ * Inlined per task constraint (no cross-tree imports).
+ */
+function formatPriceForCurrency(value: number, ccy: string): string {
+  const u = ccy.toUpperCase();
+  if (u === 'KRW' || u === 'JPY') {
+    return `${u === 'KRW' ? '₩' : '¥'}${Math.round(value).toLocaleString('en-US')}`;
+  }
+  const glyph =
+    u === 'EUR' ? '€' : u === 'GBP' ? '£' : u === 'HKD' ? 'HK$' : '$';
+  return `${glyph}${value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 
 import type { MapPin } from '../../data/types';
 
@@ -12,8 +12,58 @@ import { RegionDrawer } from './RegionDrawer';
 import { RiskLegend } from './RiskLegend';
 import { WorldMap } from './WorldMap';
 
+type ChipName = 'GLOBAL' | 'REGIONS' | 'RISK MAP' | 'FLOWS';
+
+const CHIPS: ChipName[] = ['GLOBAL', 'REGIONS', 'RISK MAP', 'FLOWS'];
+
+const pulseStyle: CSSProperties = {
+  outline: '2px solid var(--orange)',
+  outlineOffset: 4,
+  transition: 'outline 200ms ease',
+};
+
+const baseTargetStyle: CSSProperties = {
+  transition: 'outline 200ms ease',
+};
+
 export function GeoRisk() {
   const [selectedPin, setSelectedPin] = useState<MapPin | null>(null);
+  const [activeChip, setActiveChip] = useState<ChipName | null>('RISK MAP');
+  const [pulsing, setPulsing] = useState<ChipName | null>(null);
+
+  const globalRef = useRef<HTMLDivElement | null>(null);
+  const regionsRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const flowsRef = useRef<HTMLDivElement | null>(null);
+
+  const refFor = (name: ChipName) => {
+    switch (name) {
+      case 'GLOBAL':
+        return globalRef;
+      case 'REGIONS':
+        return regionsRef;
+      case 'RISK MAP':
+        return mapRef;
+      case 'FLOWS':
+        return flowsRef;
+    }
+  };
+
+  const handleChip = (name: ChipName) => {
+    setActiveChip(name);
+    const ref = refFor(name);
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setPulsing(name);
+    window.setTimeout(() => {
+      setPulsing((cur) => (cur === name ? null : cur));
+    }, 1500);
+  };
+
+  const targetStyle = (name: ChipName, extra?: CSSProperties): CSSProperties => ({
+    ...baseTargetStyle,
+    ...(extra ?? {}),
+    ...(pulsing === name ? pulseStyle : null),
+  });
 
   return (
     <div className="app-frame" style={{ fontSize: 12 }}>
@@ -28,10 +78,28 @@ export function GeoRisk() {
         </div>
         <div style={{ flex: 1 }} />
         <div className="row gap-2 geo-titlebar-chips">
-          <span className="chip">GLOBAL</span>
-          <span className="chip">REGIONS</span>
-          <span className="chip active">RISK MAP</span>
-          <span className="chip">FLOWS</span>
+          {CHIPS.map((name) => {
+            const isActive = activeChip === name;
+            return (
+              <button
+                key={name}
+                type="button"
+                className={`chip${isActive ? ' active' : ''}`}
+                aria-pressed={isActive}
+                onClick={() => handleChip(name)}
+                style={{
+                  font: 'inherit',
+                  color: 'inherit',
+                  background: 'transparent',
+                  border: 0,
+                  padding: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                {name}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -45,15 +113,18 @@ export function GeoRisk() {
         }}
       >
         <div
+          ref={mapRef}
           className="geo-map-wrap"
-          style={{
+          style={targetStyle('RISK MAP', {
             position: 'relative',
             borderRight: '1px solid var(--hairline)',
-          }}
+          })}
         >
           <WorldMap onPinClick={setSelectedPin} />
 
-          <GlobalRiskIndex />
+          <div ref={globalRef} style={targetStyle('GLOBAL')}>
+            <GlobalRiskIndex />
+          </div>
 
           <div
             className="geo-overlays"
@@ -74,7 +145,10 @@ export function GeoRisk() {
             <div style={{ pointerEvents: 'auto' }}>
               <LiveAlertCard />
             </div>
-            <div style={{ pointerEvents: 'auto' }}>
+            <div
+              ref={flowsRef}
+              style={{ ...targetStyle('FLOWS'), pointerEvents: 'auto' }}
+            >
               <LayerToggles />
             </div>
           </div>
@@ -90,7 +164,9 @@ export function GeoRisk() {
             overflow: 'auto',
           }}
         >
-          <Hotspots />
+          <div ref={regionsRef} style={targetStyle('REGIONS')}>
+            <Hotspots />
+          </div>
           <AffectedPortfolio />
           <AIHedgeSuggestion />
         </aside>
