@@ -1,0 +1,11 @@
+# Drop demo recordings here.
+#
+# Expected files (referenced by landing/src/App.tsx — same basenames, no code change needed):
+#   geo-drawer.webm          + geo-drawer.png
+#   ai-hedge.webm            + ai-hedge.png
+#   copy-to-portfolio.webm   + copy-to-portfolio.png
+#
+# Until the files exist, the dashed-orange placeholder shows "demo recording coming".
+# In dev, missing /demos/*.webm just 404s silently — the placeholder remains visible.
+#
+# Record with Kap.app (Mac, free), 800x450 window-mode, 8-12 seconds each, no audio.

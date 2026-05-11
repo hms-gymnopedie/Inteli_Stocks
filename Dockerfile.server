@@ -1,0 +1,48 @@
+# ── Build stage ──────────────────────────────────────────────────────────────
+FROM node:22-alpine AS builder
+
+WORKDIR /build
+
+# Workspace root + per-workspace manifests for cache-friendly installs.
+COPY package.json package-lock.json ./
+COPY server/package.json ./server/
+COPY app/package.json    ./app/
+
+# Install everything (workspaces hoist to root node_modules). --ignore-scripts
+# skips package install hooks; rebuild any native modules at runtime if needed.
+RUN npm ci --ignore-scripts
+
+# Compile the server.
+COPY server/ ./server/
+RUN npm run build --workspace=server
+
+# Prune dev deps in place so we can copy a slim node_modules into runtime.
+RUN npm prune --omit=dev --workspace=server
+
+# ── Runtime stage ────────────────────────────────────────────────────────────
+FROM node:22-alpine AS runtime
+
+# os.homedir() resolves from HOME — point it at the mounted data volume so
+# ~/.intelistock/*.json writes persist across container restarts.
+ENV HOME=/data
+ENV NODE_ENV=production
+
+WORKDIR /app
+
+# Hoisted root + per-workspace node_modules. The server resolves modules
+# via Node's parent-directory lookup, so the root copy is what matters.
+COPY --from=builder /build/node_modules         ./node_modules
+COPY --from=builder /build/server/node_modules  ./server/node_modules
+
+# Compiled JS + the workspace package.json (needed for "type": "module").
+COPY --from=builder /build/server/dist          ./server/dist
+COPY --from=builder /build/server/package.json  ./server/package.json
+COPY --from=builder /build/package.json         ./package.json
+
+# Data volume: every storage write lands here.
+VOLUME ["/data"]
+
+EXPOSE 3001
+
+# --env-file-if-exists picks up a mounted .env without failing when absent.
+CMD ["node", "--env-file-if-exists=/app/.env", "server/dist/index.js"]

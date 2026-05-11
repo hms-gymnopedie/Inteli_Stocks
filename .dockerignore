@@ -1,0 +1,36 @@
+# Dependencies — never copy; each stage runs npm ci
+node_modules
+app/node_modules
+server/node_modules
+
+# Build output — rebuilt inside Docker
+app/dist
+server/dist
+app/.vite
+
+# Secrets — never bake into image
+.env
+.env.*
+
+# Version control
+.git
+.gitignore
+
+# Test artifacts
+app/test-results
+app/playwright-report
+app/playwright/.cache
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS artifacts
+.DS_Store
+.idea
+.vscode
+*.swp
+
+# Design archive (large, reference only)
+design.tar.gz
+design_archive
