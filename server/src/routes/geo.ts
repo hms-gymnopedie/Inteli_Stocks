@@ -16,6 +16,7 @@ import { Router, type Request, type Response } from 'express';
 import * as grounded from '../providers/gemini-grounded.js';
 import { localStore } from '../storage/local.js';
 import { fetchQuotes, fetchQuoteSummary } from '../providers/yahoo.js';
+import { fetchNews } from '../providers/googleNews.js';
 import { TTLCache } from '../lib/cache.js';
 import {
   listSnapshots,
@@ -262,6 +263,35 @@ function regionFallbackFor(label: string): RegionDetail {
   const key = label.split('·')[0]?.trim().toUpperCase() ?? '';
   const entry = FALLBACK_REGION_DETAIL[key] ?? FALLBACK_REGION_GENERIC;
   return { label, ...entry };
+}
+
+/**
+ * Region label → Google News query string. Keyed by ISO-2 prefix so the
+ * mapping survives Gemini changing the topic suffix (e.g. "TW · WAR"
+ * still queries Taiwan). The query is engineered to bias toward
+ * geopolitical / market-relevant headlines.
+ */
+const REGION_NEWS_QUERY: Record<string, string> = {
+  UA: 'Ukraine war Russia',
+  RU: 'Russia sanctions',
+  IL: 'Israel Gaza Hamas',
+  IR: 'Iran sanctions nuclear',
+  TW: 'Taiwan strait China',
+  KR: 'North Korea missile',
+  CN: 'China tariffs Beijing',
+  US: 'White House Fed tariffs',
+  NG: 'Nigeria oil pipeline',
+  HK: 'Hong Kong protest',
+  IN: 'India geopolitics',
+};
+
+function queryForLabel(label: string): string {
+  const key = label.split('·')[0]?.trim().toUpperCase() ?? '';
+  // Pull a custom topic hint from the suffix if present
+  // (e.g. "TW · WAR" → bias toward "Taiwan war").
+  const suffix = label.split('·')[1]?.trim();
+  const base = REGION_NEWS_QUERY[key] ?? label;
+  return suffix ? `${base} ${suffix.toLowerCase()}` : base;
 }
 
 // ─── Endpoints ───────────────────────────────────────────────────────────────
@@ -532,45 +562,28 @@ async function enrichRegionETFs(detail: RegionDetail): Promise<RegionDetail> {
 
 geo.get('/region/:label', async (req: Request, res: Response) => {
   const label = String(req.params.label);
-  if (!grounded.isConfigured()) {
-    res.json(await enrichRegionETFs(regionFallbackFor(label)));
-    return;
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  const result = await grounded.askJSON<RegionDetail>({
-    cacheKey:   `geo-region:${label}:${today}`,
-    cacheTtlMs: 6 * 60 * 60 * 1000,
-    maxOutputTokens: 1024,
-    prompt: `Today is ${today}. Search the web for current events relevant to the geopolitical
-hotspot labeled "${label}" (this is a ticker-style code like "UA · WAR" or
-"TW · TENSION"). Return a JSON object with this exact shape, no markdown:
 
-{
-  "label": "${label}",
-  "events": [
-    { "date":"YYYY-MM-DD", "headline":"<≤90 char headline>" },
-    ...                          // 3-5 most recent events
-  ],
-  "etfs": [
-    { "symbol":"<TICKER>", "dayPct":"<+1.2% or −0.4%>", "direction":1|-1 },
-    ...                          // 3-5 related ETFs / instruments — yahoo-tradable, not OTC
-  ]
-}
+  // Pull events from Google News RSS (free, no key, real-time headlines)
+  // and ETFs from the per-region template (yahoo-enriched downstream).
+  // This replaces the previous Gemini-only path that was unreliable. The
+  // template still ships as a fallback in case Google News is unreachable.
+  const tpl   = regionFallbackFor(label);
+  const query = queryForLabel(label);
+  const news  = await fetchNews(query, 5);
 
-Output ONLY the JSON object.`,
-  });
+  const events = news.length > 0
+    ? news.map((n) => ({
+        date:     n.date,
+        headline: n.source ? `${n.headline} — ${n.source}` : n.headline,
+      }))
+    : tpl.events;
 
-  // If Gemini didn't return anything useful (timeout / parse fail / sparse
-  // events) fall back to the per-ISO-2 template so the drawer never lands
-  // with just one placeholder row.
-  const merged: RegionDetail = (() => {
-    if (!result) return regionFallbackFor(label);
-    const tpl = regionFallbackFor(label);
-    return {
-      label,
-      events: (Array.isArray(result.events) && result.events.length > 0) ? result.events : tpl.events,
-      etfs:   (Array.isArray(result.etfs)   && result.etfs.length   > 0) ? result.etfs   : tpl.etfs,
-    };
-  })();
-  res.json(await enrichRegionETFs(merged));
+  res.json(await enrichRegionETFs({
+    label,
+    events,
+    etfs: tpl.etfs,
+  }));
 });
+
+// Silence unused-import warning — kept for future structured Gemini fallback.
+void grounded.isConfigured;
