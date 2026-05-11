@@ -96,7 +96,7 @@ export function GlobalRiskIndex() {
           }}
         >
           <div className="row gap-2" style={{ alignItems: 'baseline' }}>
-            <span className="wf-mini">GLOBAL RISK</span>
+            <span className="wf-mini">GLOBAL RISK INDEX</span>
             <span className="wf-num accent" style={{ fontSize: open ? 28 : 16, transition: 'font-size 150ms ease' }}>
               {data ? data.value : '—'}
               <span className="muted-2" style={{ fontSize: open ? 14 : 10 }}>/100</span>

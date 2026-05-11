@@ -42,7 +42,7 @@ interface AskOpts {
   prompt: string;
   /** Model id. Default: gemini-2.5-flash (cheap + fast for grounded search). */
   model?: string;
-  /** Maximum output tokens. Default: 1024. */
+  /** Maximum output tokens. Default: 4096 (grounded search runs long). */
   maxOutputTokens?: number;
 }
 
@@ -109,42 +109,109 @@ export async function askJSON<T>(opts: AskOpts): Promise<T | null> {
   if (!isConfigured()) return null;
 
   const ttl = opts.cacheTtlMs ?? ONE_HOUR_MS;
-  // Pull cache; loader runs on miss.
-  return (_cache as TTLCache<T | null>).get(opts.cacheKey, async () => {
-    try {
-      const ai = geminiClient();
-      // The @google/genai SDK exposes the googleSearch tool via:
-      //   config: { tools: [{ googleSearch: {} }] }
-      const response = await ai.models.generateContent({
-        model: opts.model ?? 'gemini-2.5-flash',
-        contents: opts.prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-          maxOutputTokens: opts.maxOutputTokens ?? 1024,
-        },
-      });
-      const text = response.text ?? '';
-      const json = extractJSON(text);
-      if (!json) {
-        console.warn(`[gemini-grounded] no JSON found for ${opts.cacheKey} in: ${text.slice(0, 120)}…`);
-        return null;
+  // Peek into the existing cache directly so we can avoid caching nulls
+  // (otherwise a transient parse failure would poison the entry for the
+  // full TTL and serve mock data for 6h).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const peek = (_cache as any).store.get(opts.cacheKey) as
+    | { value: T | null; expiresAt: number }
+    | undefined;
+  if (peek && peek.expiresAt > Date.now() && peek.value != null) {
+    return peek.value;
+  }
+
+  try {
+    const ai = geminiClient();
+    const response = await ai.models.generateContent({
+      model: opts.model ?? 'gemini-2.5-flash',
+      contents: opts.prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        maxOutputTokens: opts.maxOutputTokens ?? 4096,
+      },
+    });
+    // The SDK exposes `response.text` as a convenience but it can come
+    // back undefined / empty when grounded search returns its content
+    // inside `candidates[0].content.parts[].text` chunks. Concatenate all
+    // text parts manually as a fallback.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r = response as any;
+    let text: string = typeof r.text === 'string' ? r.text : '';
+    if (!text) {
+      const parts = r?.candidates?.[0]?.content?.parts;
+      if (Array.isArray(parts)) {
+        text = parts
+          .map((p: { text?: string }) => (typeof p?.text === 'string' ? p.text : ''))
+          .join('');
       }
+    }
+    if (!text) {
+      const blockReason = r?.promptFeedback?.blockReason;
+      const finishReason = r?.candidates?.[0]?.finishReason;
+      console.warn(
+        `[gemini-grounded] empty response for ${opts.cacheKey} (block=${blockReason ?? '-'} finish=${finishReason ?? '-'})`,
+      );
+      return null;
+    }
+    const json = extractJSON(text);
+    if (!json) {
+      console.warn(`[gemini-grounded] no JSON found for ${opts.cacheKey} (text len=${text.length}): ${text.slice(0, 200)}…`);
+      return null;
+    }
+    let parsed: T;
+    try {
+      parsed = JSON.parse(json) as T;
+    } catch (err) {
+      // Rescue: walk the JSON char-by-char and escape literal control
+      // characters (\n \r \t) that appear inside string literals. Gemini
+      // frequently emits multi-line headlines with raw \n inside the JSON
+      // string, which is invalid per spec.
+      const rescued = escapeStringCtrlChars(json);
       try {
-        return JSON.parse(json) as T;
-      } catch (err) {
+        parsed = JSON.parse(rescued) as T;
+      } catch {
         console.warn(
-          `[gemini-grounded] JSON parse failed for ${opts.cacheKey}: ${(err as Error).message} — extracted: ${json.slice(0, 120)}…`,
+          `[gemini-grounded] JSON parse failed for ${opts.cacheKey} (raw len=${text.length}, extracted len=${json.length}): ${(err as Error).message} — head: ${json.slice(0, 300)}…`,
         );
         return null;
       }
-    } catch (err) {
-      console.error(`[gemini-grounded] generation failed for ${opts.cacheKey}:`, (err as Error).message);
-      return null;
     }
-  // We deliberately swallow errors above and return null in the cached
-  // value, so a transient outage doesn't poison the cache forever (the
-  // null entry expires on the same TTL and re-tries naturally).
-  }) as Promise<T | null>;
+    // Cache only on success.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (_cache as any).store.set(opts.cacheKey, { value: parsed, expiresAt: Date.now() + ttl });
+    return parsed;
+  } catch (err) {
+    console.error(`[gemini-grounded] generation failed for ${opts.cacheKey}:`, (err as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Walk JSON and escape literal newline / CR / tab characters when they
+ * appear inside string literals. JSON spec forbids unescaped control
+ * characters in strings, but Gemini happily emits them. Outside strings
+ * they're harmless whitespace — pass through unchanged.
+ */
+function escapeStringCtrlChars(s: string): string {
+  let out = '';
+  let inStr = false;
+  let esc   = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc)         { out += ch; esc = false; continue; }
+      if (ch === '\\') { out += ch; esc = true;  continue; }
+      if (ch === '"')  { out += ch; inStr = false; continue; }
+      if (ch === '\n') { out += '\\n'; continue; }
+      if (ch === '\r') { out += '\\r'; continue; }
+      if (ch === '\t') { out += '\\t'; continue; }
+      out += ch;
+    } else {
+      if (ch === '"')  { out += ch; inStr = true; continue; }
+      out += ch;
+    }
+  }
+  return out;
 }
 
 /** Force-evict a cached entry (e.g. on user-triggered refresh). */
