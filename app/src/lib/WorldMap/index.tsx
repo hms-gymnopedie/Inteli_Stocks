@@ -53,7 +53,7 @@ import {
 import { geoEqualEarth, geoPath } from 'd3-geo';
 import type { GeoProjection } from 'd3-geo';
 
-import type { MapPin, RegionHeat, FlowLine } from '../../data/types';
+import type { MapPin, RegionHeat, FlowLine, RiskLevel } from '../../data/types';
 import { COUNTRIES, iso3 } from './data';
 import {
   applyPan,
@@ -134,6 +134,13 @@ interface WorldMapProps {
    */
   onPinClick?: (pin: MapPin) => void;
   /**
+   * B32-2 — heat-region click handler. When set, every country tinted in
+   * `heat` becomes clickable (cursor: pointer + role="button") and reports
+   * its ISO-3 code on click. Use it to open per-country detail without
+   * forcing the user to hit the small pin circle.
+   */
+  onCountryClick?: (iso3: string, level: RiskLevel) => void;
+  /**
    * B2-MAP-2 — opt out of zoom/pan/keyboard handlers. Default `true`. When
    * `false`, the SVG is fully static and matches the pre-B2-MAP-2 visual
    * output exactly.
@@ -185,6 +192,7 @@ export function WorldMap({
   heat = {},
   flows = [],
   onPinClick,
+  onCountryClick,
   interactive = true,
 }: WorldMapProps) {
   // Build the projection + path generator once. Re-fit only if the COUNTRIES
@@ -268,7 +276,7 @@ export function WorldMap({
       // If the pointerdown landed on a pin, let the pin's `<g role="button">`
       // handle the click — bail out of drag start.
       const target = e.target as Element | null;
-      if (target && target.closest('[data-pin="true"]')) return;
+      if (target && (target.closest('[data-pin="true"]') || target.closest('[data-country="true"]'))) return;
       // Touch is handled by the touch handlers (so we can detect 2-finger
       // pinch). Skip the synthesized pointer events.
       if (e.pointerType === 'touch') return;
@@ -345,7 +353,7 @@ export function WorldMap({
         };
       } else if (e.touches.length === 1) {
         const target = e.target as Element | null;
-        if (target && target.closest('[data-pin="true"]')) return;
+        if (target && (target.closest('[data-pin="true"]') || target.closest('[data-country="true"]'))) return;
         const t = e.touches[0];
         dragStateRef.current = {
           pointerId: -1,
@@ -427,7 +435,7 @@ export function WorldMap({
       // Defer to the pin handler when a pin has focus (Enter/Space activate
       // the pin, not pan/zoom).
       const tgt = e.target as Element | null;
-      if (tgt && tgt.closest('[data-pin="true"]')) return;
+      if (tgt && (tgt.closest('[data-pin="true"]') || tgt.closest('[data-country="true"]'))) return;
 
       const cx = VIEWBOX_W / 2;
       const cy = VIEWBOX_H / 2;
@@ -554,6 +562,7 @@ export function WorldMap({
               const code = iso3(f);
               const level = code ? heat[code] : undefined;
               const heatFill = level ? HEAT_FILL[level] : null;
+              const clickable = !!onCountryClick && !!level && !!code;
               return (
                 <g key={code ?? i}>
                   <path
@@ -563,7 +572,33 @@ export function WorldMap({
                     strokeWidth={0.4}
                     strokeLinejoin="round"
                   />
-                  {heatFill && <path d={d} fill={heatFill} />}
+                  {heatFill && (
+                    <path
+                      d={d}
+                      fill={heatFill}
+                      data-country={clickable ? 'true' : undefined}
+                      style={clickable ? { cursor: 'pointer' } : undefined}
+                      role={clickable ? 'button' : undefined}
+                      tabIndex={clickable ? 0 : undefined}
+                      aria-label={clickable ? `Open detail for ${code}` : undefined}
+                      onClick={clickable
+                        ? (e) => {
+                            e.stopPropagation();
+                            onCountryClick!(code!, level as RiskLevel);
+                          }
+                        : undefined
+                      }
+                      onKeyDown={clickable
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onCountryClick!(code!, level as RiskLevel);
+                            }
+                          }
+                        : undefined
+                      }
+                    />
+                  )}
                 </g>
               );
             })}

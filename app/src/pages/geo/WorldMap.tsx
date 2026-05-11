@@ -5,15 +5,16 @@
 // the click target.
 
 import { getRiskMap } from '../../data/geo';
-import type { MapPin } from '../../data/types';
+import type { MapPin, RiskLevel } from '../../data/types';
 import { WorldMap as WorldMapPrimitive } from '../../lib/primitives';
 import { useAsync } from '../../lib/useAsync';
 
 interface WorldMapProps {
-  onPinClick?: (pin: MapPin) => void;
+  onPinClick?:     (pin: MapPin) => void;
+  onCountryClick?: (iso3: string, level: RiskLevel) => void;
 }
 
-export function WorldMap({ onPinClick }: WorldMapProps = {}) {
+export function WorldMap({ onPinClick, onCountryClick }: WorldMapProps = {}) {
   const { data } = useAsync(getRiskMap, []);
   return (
     <WorldMapPrimitive
@@ -21,6 +22,7 @@ export function WorldMap({ onPinClick }: WorldMapProps = {}) {
       pins={data?.pins ?? []}
       flows={data?.flows ?? []}
       onPinClick={onPinClick}
+      onCountryClick={onCountryClick}
     />
   );
 }

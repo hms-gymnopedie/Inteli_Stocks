@@ -1,6 +1,6 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useRef, useState, type CSSProperties } from 'react';
 
-import type { MapPin } from '../../data/types';
+import type { MapPin, RiskHotspot, RiskLevel } from '../../data/types';
 
 import { AffectedPortfolio } from './AffectedPortfolio';
 import { AIHedgeSuggestion } from './AIHedgeSuggestion';
@@ -16,6 +16,42 @@ type ChipName = 'GLOBAL' | 'REGIONS' | 'RISK MAP' | 'FLOWS';
 
 const CHIPS: ChipName[] = ['GLOBAL', 'REGIONS', 'RISK MAP', 'FLOWS'];
 
+/**
+ * Map ISO-3 country codes to the same `LABEL` format that the pins (and the
+ * server's per-region fallback) use, so clicking a heat-tinted country
+ * opens the same drawer a pin would. Anything missing falls back to the
+ * country code itself — the drawer still renders, just with the generic
+ * "No timeline" body.
+ */
+const ISO3_TO_PIN_LABEL: Record<string, string> = {
+  UKR: 'UA · WAR',
+  RUS: 'UA · WAR',
+  ISR: 'IL · CONFLICT',
+  PSE: 'IL · CONFLICT',
+  IRN: 'IR · TENSION',
+  TWN: 'TW · TENSION',
+  KOR: 'KR · NK RISK',
+  USA: 'US · ELECTION',
+  CHN: 'CN · TARIFFS',
+  NGA: 'NG · ENERGY',
+};
+
+/**
+ * Hotspot → pin label. Best-effort substring match against the hotspot's
+ * `name` field. Falls back to using the hotspot name verbatim.
+ */
+function hotspotToLabel(name: string): string {
+  const n = name.toLowerCase();
+  if (n.includes('taiwan'))   return 'TW · TENSION';
+  if (n.includes('ukrain') || n.includes('russia')) return 'UA · WAR';
+  if (n.includes('iran'))     return 'IR · TENSION';
+  if (n.includes('israel') || n.includes('middle east') || n.includes('red sea')) return 'IL · CONFLICT';
+  if (n.includes('korea'))    return 'KR · NK RISK';
+  if (n.includes('china') || n.includes('us-china') || n.includes('tariff')) return 'US · ELECTION';
+  if (n.includes('niger'))    return 'NG · ENERGY';
+  return name;
+}
+
 const pulseStyle: CSSProperties = {
   outline: '2px solid var(--orange)',
   outlineOffset: 4,
@@ -30,6 +66,17 @@ export function GeoRisk() {
   const [selectedPin, setSelectedPin] = useState<MapPin | null>(null);
   const [activeChip, setActiveChip] = useState<ChipName | null>('RISK MAP');
   const [pulsing, setPulsing] = useState<ChipName | null>(null);
+
+  // Heat-region click — synthesize a pin so the existing drawer flow works.
+  const handleCountryClick = useCallback((iso3: string, level: RiskLevel) => {
+    const label = ISO3_TO_PIN_LABEL[iso3] ?? iso3;
+    setSelectedPin({ label, level, x: 0, y: 0 });
+  }, []);
+
+  // Hotspot card click — same synthesized pin pattern.
+  const handleHotspotSelect = useCallback((h: RiskHotspot) => {
+    setSelectedPin({ label: hotspotToLabel(h.name), level: h.level, x: 0, y: 0 });
+  }, []);
 
   const globalRef = useRef<HTMLDivElement | null>(null);
   const regionsRef = useRef<HTMLDivElement | null>(null);
@@ -120,7 +167,10 @@ export function GeoRisk() {
             borderRight: '1px solid var(--hairline)',
           })}
         >
-          <WorldMap onPinClick={setSelectedPin} />
+          <WorldMap
+            onPinClick={setSelectedPin}
+            onCountryClick={handleCountryClick}
+          />
 
           <div ref={globalRef} style={targetStyle('GLOBAL')}>
             <GlobalRiskIndex />
@@ -165,7 +215,7 @@ export function GeoRisk() {
           }}
         >
           <div ref={regionsRef} style={targetStyle('REGIONS')}>
-            <Hotspots />
+            <Hotspots onSelect={handleHotspotSelect} />
           </div>
           <AffectedPortfolio />
           <AIHedgeSuggestion />

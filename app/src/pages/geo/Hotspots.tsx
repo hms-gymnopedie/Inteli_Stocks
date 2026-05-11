@@ -3,6 +3,11 @@ import { getHotspots } from '../../data/geo';
 import type { RiskHotspot, RiskLevel } from '../../data/types';
 import { useAsync } from '../../lib/useAsync';
 
+interface HotspotsProps {
+  /** Click on a hotspot card opens the region drawer for it. (B32-2) */
+  onSelect?: (hotspot: RiskHotspot) => void;
+}
+
 type SortKey = 'impact' | 'level' | 'region';
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -21,7 +26,7 @@ function parseImpact(impact: string): number {
 
 const SKELETON_COUNT = 5;
 
-export function Hotspots() {
+export function Hotspots({ onSelect }: HotspotsProps = {}) {
   const { data, loading } = useAsync<RiskHotspot[]>(getHotspots, []);
   const [sortKey, setSortKey] = useState<SortKey>('impact');
 
@@ -121,11 +126,26 @@ export function Hotspots() {
               </div>
             );
           }
+          const clickable = !!onSelect;
           return (
             <div
               key={r.name}
-              className="wf-panel-flat"
-              style={{ padding: 10 }}
+              className={'wf-panel-flat' + (clickable ? ' dense-row-hover' : '')}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              aria-label={clickable ? `Open detail for ${r.name}` : undefined}
+              onClick={clickable ? () => onSelect!(r) : undefined}
+              onKeyDown={
+                clickable
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelect!(r);
+                      }
+                    }
+                  : undefined
+              }
+              style={{ padding: 10, cursor: clickable ? 'pointer' : 'default' }}
             >
               <div className="row between">
                 <div
