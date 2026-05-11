@@ -43,11 +43,14 @@ export function LayerToggles() {
 
   const isSkeleton = !data || data.length === 0;
 
+  const [open, setOpen] = useState(false);
+  const activeCount = layers.filter((l) => l.enabled).length;
+
   return (
     <div
       className="wf-panel" data-tour="geo-layers"
       style={{
-        padding: 12,
+        padding: open ? 12 : '6px 10px',
         backdropFilter: 'blur(8px)',
         background: 'rgba(20,20,22,0.7)',
         opacity: loading && !data ? 0.5 : 1,
@@ -55,8 +58,32 @@ export function LayerToggles() {
       }}
       aria-busy={loading && !data}
     >
-      <div className="wf-label">Layers</div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls="geo-layers-body"
+        style={{
+          all: 'unset', cursor: 'pointer', width: '100%',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}
+      >
+        <div className="row gap-2" style={{ alignItems: 'center' }}>
+          <span className="wf-label">Layers</span>
+          {!open && !isSkeleton && (
+            <span className="wf-mini muted">{activeCount} / {layers.length} on</span>
+          )}
+        </div>
+        <span style={{
+          display: 'inline-block',
+          transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+          transition: 'transform 150ms ease',
+          color: 'var(--fg-3)', fontSize: 10,
+        }}>▾</span>
+      </button>
+      {open && (
       <div
+        id="geo-layers-body"
         role="group"
         aria-label="Map layer toggles"
         style={{
@@ -139,6 +166,7 @@ export function LayerToggles() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

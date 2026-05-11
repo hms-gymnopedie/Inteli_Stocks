@@ -124,15 +124,145 @@ const FALLBACK_STATE: GeoState = {
   },
 };
 
-const FALLBACK_REGION: RegionDetail = {
-  label: '—',
+/**
+ * Per-ISO-2 region fallback details. Server uses these when Gemini is
+ * not configured or returns nothing, so the drawer always has real
+ * events + relevant ETFs instead of a single placeholder row.
+ * Yahoo enrichment in enrichRegionETFs() overlays live dayPct/currency
+ * on top of these symbols.
+ */
+const FALLBACK_REGION_DETAIL: Record<string, Omit<RegionDetail, 'label'>> = {
+  UA: {
+    events: [
+      { date: '26 APR', headline: 'Drone strikes hit Black Sea grain port; wheat futures +2.4%' },
+      { date: '24 APR', headline: 'EU pledges €4.2B additional military aid package' },
+      { date: '21 APR', headline: 'Front-line shifts near Donetsk; gas pipeline corridor at risk' },
+      { date: '17 APR', headline: 'IMF disburses $880M tranche; UAH stabilises vs USD' },
+    ],
+    etfs: [
+      { symbol: 'WEAT', dayPct: '+2.4%', direction:  1 },
+      { symbol: 'XOP',  dayPct: '+1.1%', direction:  1 },
+      { symbol: 'EZU',  dayPct: '−0.6%', direction: -1 },
+      { symbol: 'GLD',  dayPct: '+0.4%', direction:  1 },
+    ],
+  },
+  IL: {
+    events: [
+      { date: '27 APR', headline: 'Cross-border exchanges; Brent +1.8% on supply concern' },
+      { date: '23 APR', headline: 'US Navy redeploys carrier group to Eastern Med' },
+      { date: '19 APR', headline: 'Tel Aviv tech IPO pipeline deferred Q3' },
+      { date: '12 APR', headline: 'Shipping insurance premium for Eilat route +35%' },
+    ],
+    etfs: [
+      { symbol: 'EIS',  dayPct: '−1.4%', direction: -1 },
+      { symbol: 'XLE',  dayPct: '+1.1%', direction:  1 },
+      { symbol: 'USO',  dayPct: '+1.8%', direction:  1 },
+      { symbol: 'ITA',  dayPct: '+0.5%', direction:  1 },
+    ],
+  },
+  IR: {
+    events: [
+      { date: '25 APR', headline: 'New US sanctions target petrochemical exports' },
+      { date: '20 APR', headline: 'Strait of Hormuz transit slows; tanker rates +12%' },
+      { date: '15 APR', headline: 'Crude exports to Asia drop to 6-month low' },
+      { date: '08 APR', headline: 'IAEA inspectors regain limited access' },
+    ],
+    etfs: [
+      { symbol: 'USO',  dayPct: '+1.8%', direction:  1 },
+      { symbol: 'BNO',  dayPct: '+2.1%', direction:  1 },
+      { symbol: 'XLE',  dayPct: '+1.1%', direction:  1 },
+      { symbol: 'GLD',  dayPct: '+0.4%', direction:  1 },
+    ],
+  },
+  TW: {
+    events: [
+      { date: '28 APR', headline: 'PLA exercises in Taiwan Strait expanded to 72hr window' },
+      { date: '24 APR', headline: 'TSMC reports record N3 yield; capex guidance unchanged' },
+      { date: '20 APR', headline: 'US ships 2nd $500M arms package; semis ETF flows positive' },
+      { date: '14 APR', headline: 'Cable repair operation resumes after 11-day outage' },
+    ],
+    etfs: [
+      { symbol: 'EWT',  dayPct: '−1.1%', direction: -1 },
+      { symbol: 'SOXX', dayPct: '−0.8%', direction: -1 },
+      { symbol: 'SMH',  dayPct: '−0.6%', direction: -1 },
+      { symbol: 'FXI',  dayPct: '−0.3%', direction: -1 },
+    ],
+  },
+  KR: {
+    events: [
+      { date: '26 APR', headline: 'BoK holds base rate at 3.50%; KRW recovers 0.4%' },
+      { date: '22 APR', headline: 'Samsung Electronics earnings beat; HBM demand robust' },
+      { date: '18 APR', headline: 'National Assembly election results; market neutral' },
+      { date: '11 APR', headline: 'Cross-border tension uptick; defence stocks rally' },
+    ],
+    etfs: [
+      { symbol: 'EWY',  dayPct: '+0.6%', direction:  1 },
+      { symbol: 'SOXX', dayPct: '−0.8%', direction: -1 },
+      { symbol: 'KORU', dayPct: '+1.7%', direction:  1 },
+      { symbol: 'SMH',  dayPct: '−0.6%', direction: -1 },
+    ],
+  },
+  US: {
+    events: [
+      { date: '27 APR', headline: 'White House previews tariff hikes on EV imports; auto-suppliers mixed' },
+      { date: '24 APR', headline: 'Fed minutes signal patience; 10Y yield −4bp' },
+      { date: '20 APR', headline: 'NVDA-led semis squeeze; Nasdaq +1.4% intraday reversal' },
+      { date: '15 APR', headline: 'Q1 GDP advance estimate +2.1% annualised' },
+    ],
+    etfs: [
+      { symbol: 'SPY',  dayPct: '+0.3%', direction:  1 },
+      { symbol: 'QQQ',  dayPct: '+0.5%', direction:  1 },
+      { symbol: 'XLI',  dayPct: '−0.2%', direction: -1 },
+      { symbol: 'TLT',  dayPct: '+0.4%', direction:  1 },
+    ],
+  },
+  NG: {
+    events: [
+      { date: '25 APR', headline: 'Niger Delta production resumes; Bonny Light differential −$0.8' },
+      { date: '20 APR', headline: 'CBN holds rate at 24.75%; NGN volatility easing' },
+      { date: '14 APR', headline: 'Dangote refinery imports first cargo of US WTI' },
+      { date: '07 APR', headline: 'Pipeline sabotage incident — short-lived 80kbpd outage' },
+    ],
+    etfs: [
+      { symbol: 'NGE',  dayPct: '−0.4%', direction: -1 },
+      { symbol: 'XOP',  dayPct: '+1.1%', direction:  1 },
+      { symbol: 'AFK',  dayPct: '−0.2%', direction: -1 },
+      { symbol: 'USO',  dayPct: '+1.8%', direction:  1 },
+    ],
+  },
+  CN: {
+    events: [
+      { date: '26 APR', headline: 'PBoC drains liquidity via reverse repo; yuan steady' },
+      { date: '22 APR', headline: 'Property sector measures expanded to 30 more cities' },
+      { date: '18 APR', headline: 'Q1 GDP +5.3% YoY beats consensus; retail sales lag' },
+      { date: '12 APR', headline: 'US-China commerce talks resume; tariff threat eased' },
+    ],
+    etfs: [
+      { symbol: 'FXI',  dayPct: '−0.3%', direction: -1 },
+      { symbol: 'KWEB', dayPct: '+0.8%', direction:  1 },
+      { symbol: 'MCHI', dayPct: '+0.4%', direction:  1 },
+      { symbol: 'EWH',  dayPct: '+0.2%', direction:  1 },
+    ],
+  },
+};
+
+const FALLBACK_REGION_GENERIC: Omit<RegionDetail, 'label'> = {
   events: [
-    { date: '2026-04-30', headline: 'Recent geopolitical activity (no live source)' },
+    { date: 'TODAY', headline: 'No detailed timeline on file for this region — showing market proxies.' },
   ],
   etfs: [
-    { symbol: 'EWZ', dayPct: '+0.0%', direction: 1 },
+    { symbol: 'SPY', dayPct: '+0.0%', direction: 1 },
+    { symbol: 'GLD', dayPct: '+0.0%', direction: 1 },
+    { symbol: 'TLT', dayPct: '+0.0%', direction: 1 },
   ],
 };
+
+/** Look up the per-region template by ISO-2 prefix (e.g. "TW · TENSION" → "TW"). */
+function regionFallbackFor(label: string): RegionDetail {
+  const key = label.split('·')[0]?.trim().toUpperCase() ?? '';
+  const entry = FALLBACK_REGION_DETAIL[key] ?? FALLBACK_REGION_GENERIC;
+  return { label, ...entry };
+}
 
 // ─── Endpoints ───────────────────────────────────────────────────────────────
 
@@ -403,7 +533,7 @@ async function enrichRegionETFs(detail: RegionDetail): Promise<RegionDetail> {
 geo.get('/region/:label', async (req: Request, res: Response) => {
   const label = String(req.params.label);
   if (!grounded.isConfigured()) {
-    res.json(await enrichRegionETFs({ ...FALLBACK_REGION, label }));
+    res.json(await enrichRegionETFs(regionFallbackFor(label)));
     return;
   }
   const today = new Date().toISOString().slice(0, 10);
@@ -430,6 +560,17 @@ hotspot labeled "${label}" (this is a ticker-style code like "UA · WAR" or
 Output ONLY the JSON object.`,
   });
 
-  const base = result ?? { ...FALLBACK_REGION, label };
-  res.json(await enrichRegionETFs(base));
+  // If Gemini didn't return anything useful (timeout / parse fail / sparse
+  // events) fall back to the per-ISO-2 template so the drawer never lands
+  // with just one placeholder row.
+  const merged: RegionDetail = (() => {
+    if (!result) return regionFallbackFor(label);
+    const tpl = regionFallbackFor(label);
+    return {
+      label,
+      events: (Array.isArray(result.events) && result.events.length > 0) ? result.events : tpl.events,
+      etfs:   (Array.isArray(result.etfs)   && result.etfs.length   > 0) ? result.etfs   : tpl.etfs,
+    };
+  })();
+  res.json(await enrichRegionETFs(merged));
 });

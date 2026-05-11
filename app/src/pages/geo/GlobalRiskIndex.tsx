@@ -59,6 +59,7 @@ export function GlobalRiskIndex() {
   const { data, loading } = useAsync<GlobalRiskIndexData>(getGlobalIndex, []);
 
   const [range, setRange] = useState<TrailRange>('1W');
+  const [open,  setOpen]  = useState(false);
   const fetchTrail = useCallback(() => getIndexTrail(range), [range]);
   const { data: trail } = useAsync<GeoIndexTrail>(fetchTrail, [range]);
 
@@ -75,56 +76,77 @@ export function GlobalRiskIndex() {
       <div
         className="wf-panel" data-tour="geo-index"
         style={{
-          padding: '8px 12px',
+          padding: open ? '8px 12px' : '6px 10px',
           backdropFilter: 'blur(8px)',
           background: 'rgba(20,20,22,0.7)',
           opacity: loading && !data ? 0.5 : 1,
-          transition: 'opacity 200ms ease',
+          transition: 'opacity 200ms ease, padding 150ms ease',
         }}
         aria-busy={loading && !data}
       >
-        <div className="wf-mini">GLOBAL RISK INDEX</div>
-        <div
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-controls="geo-index-body"
           style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 8,
+            all: 'unset', cursor: 'pointer', width: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 10,
           }}
         >
-          <div className="wf-num accent" style={{ fontSize: 28 }}>
-            {data ? data.value : '—'}
-            <span className="muted-2" style={{ fontSize: 14 }}>
-              /100
+          <div className="row gap-2" style={{ alignItems: 'baseline' }}>
+            <span className="wf-mini">GLOBAL RISK</span>
+            <span className="wf-num accent" style={{ fontSize: open ? 28 : 16, transition: 'font-size 150ms ease' }}>
+              {data ? data.value : '—'}
+              <span className="muted-2" style={{ fontSize: open ? 14 : 10 }}>/100</span>
             </span>
+            {!open && (
+              <span className="wf-mono down" style={{ fontSize: 10 }}>
+                {data ? `${data.delta >= 0 ? '+' : '−'}${Math.abs(data.delta)}` : '—'}
+              </span>
+            )}
           </div>
-          <div className="wf-mono down" style={{ fontSize: 11 }}>
-            {data
-              ? `${data.delta >= 0 ? '+' : '−'}${Math.abs(data.delta)} ${data.period}`
-              : '—'}
-          </div>
-          <div
-            style={{ display: 'flex', gap: 4, marginLeft: 4 }}
-            role="tablist"
-            aria-label="Risk index trail range"
-          >
-            {RANGES.map((r) => (
-              <button
-                key={r}
-                type="button"
-                role="tab"
-                aria-selected={range === r}
-                className={'chip' + (range === r ? ' active' : '')}
-                onClick={() => setRange(r)}
+          <span style={{
+            display: 'inline-block',
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 150ms ease',
+            color: 'var(--fg-3)', fontSize: 10,
+          }}>▾</span>
+        </button>
+        {open && (
+          <div id="geo-index-body" style={{ marginTop: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <div className="wf-mono down" style={{ fontSize: 11 }}>
+                {data
+                  ? `${data.delta >= 0 ? '+' : '−'}${Math.abs(data.delta)} ${data.period}`
+                  : '—'}
+              </div>
+              <div
+                style={{ display: 'flex', gap: 4 }}
+                role="tablist"
+                aria-label="Risk index trail range"
               >
-                {r}
-              </button>
-            ))}
+                {RANGES.map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    role="tab"
+                    aria-selected={range === r}
+                    className={'chip' + (range === r ? ' active' : '')}
+                    onClick={() => setRange(r)}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <Spark points={trail?.snapshots ?? []} />
+            </div>
+            <div className="wf-mini">{data ? data.note : '—'}</div>
           </div>
-        </div>
-        <div style={{ marginTop: 2 }}>
-          <Spark points={trail?.snapshots ?? []} />
-        </div>
-        <div className="wf-mini">{data ? data.note : '—'}</div>
+        )}
       </div>
     </div>
   );
