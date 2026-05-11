@@ -199,12 +199,29 @@ ai.post('/verdict', async (req: Request, res: Response) => {
 
 // ─── POST /hedge ─────────────────────────────────────────────────────────────
 
+interface HedgeHolding { symbol: string; weight?: string; name?: string }
+interface HedgeHotspot { name: string; level: 'low' | 'med' | 'high'; impact?: string; tickers?: string }
+
 ai.post('/hedge', async (req: Request, res: Response) => {
-  const body = req.body as { exposure?: string; provider?: string; model?: string };
+  const body = req.body as {
+    exposure?: string;
+    provider?: string;
+    model?: string;
+    holdings?: HedgeHolding[];
+    hotspots?: HedgeHotspot[];
+  };
   const provider = pickProvider(body.provider);
 
   if (!providerConfigured(provider)) { notConfigured(res, provider); return; }
-  if (!body.exposure || typeof body.exposure !== 'string') {
+
+  // Accept either the legacy free-form `exposure` string OR the new
+  // structured { holdings, hotspots } payload. When both are supplied,
+  // structured wins — string becomes a hint suffix. (B31-4)
+  const hasStructured =
+    Array.isArray(body.holdings) && body.holdings.length > 0 &&
+    Array.isArray(body.hotspots) && body.hotspots.length > 0;
+
+  if (!hasStructured && (!body.exposure || typeof body.exposure !== 'string')) {
     res.status(400).json({ ok: false, reason: 'missing_exposure' });
     return;
   }
@@ -212,12 +229,29 @@ ai.post('/hedge', async (req: Request, res: Response) => {
   const model = resolveModel(provider, body.model);
 
   try {
-    const exposure = body.exposure.trim();
+    let exposure = '';
+    if (hasStructured) {
+      const holdingsLine = (body.holdings ?? [])
+        .slice(0, 30)
+        .map((h) => `${h.symbol}${h.weight ? ` (${h.weight})` : ''}${h.name ? ` — ${h.name}` : ''}`)
+        .join(', ');
+      const hotspotsLine = (body.hotspots ?? [])
+        .slice(0, 10)
+        .map((s) => `[${s.level.toUpperCase()}] ${s.name}${s.impact ? ` — ${s.impact}` : ''}${s.tickers ? ` (tickers: ${s.tickers})` : ''}`)
+        .join('\n  ');
+      exposure = [
+        `Current portfolio holdings: ${holdingsLine}`,
+        `Active geopolitical hotspots:\n  ${hotspotsLine}`,
+        body.exposure ? `Additional context: ${body.exposure}` : '',
+      ].filter(Boolean).join('\n\n');
+    } else {
+      exposure = (body.exposure ?? '').trim();
+    }
     const result = await generate({
       provider,
       model,
       system: HEDGE_SYSTEM,
-      user:   `Portfolio exposure: ${exposure}\n\nReturn the hedge proposal JSON.`,
+      user:   `Portfolio exposure & geopolitical context:\n\n${exposure}\n\nGiven these holdings and hotspots, return the hedge proposal JSON. When you suggest specific trades in "description", name concrete tickers (favoring ones from the holdings + hotspot ticker lists above) and approximate sizing (e.g. "trim TSM 25%" or "buy GLD 1% of NAV").`,
     });
     const data = parseJSON<{
       proposalId: string; description: string;

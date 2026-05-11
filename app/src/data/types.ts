@@ -211,8 +211,15 @@ export interface MapPin {
   lng?: number;
 }
 
-/** A trade flow line between two SVG points. */
-export type FlowLine = [number, number, number, number];
+/**
+ * A trade flow line between two SVG / geographic points.
+ *  - 4-tuple: [x1, y1, x2, y2] in viewBox coords OR [lng1, lat1, lng2, lat2]
+ *  - 5-tuple: appends `level` (1=low/watch, 2=med/tension, 3=high/crisis)
+ *    so the renderer can color and weight the line. (B31-3)
+ */
+export type FlowLine =
+  | [number, number, number, number]
+  | [number, number, number, number, number];
 
 /** Complete risk map data passed to WorldMap. */
 export interface RiskMapEntry {
@@ -227,6 +234,18 @@ export interface GlobalRiskIndex {
   delta: number;
   period: string;
   note: string;
+}
+
+/** A single snapshot of the global risk index over time. (B31-2) */
+export interface GeoIndexSnapshot {
+  ts:    number;
+  value: number;
+  note?: string;
+}
+
+export interface GeoIndexTrail {
+  range:     '1D' | '1W' | '1M';
+  snapshots: GeoIndexSnapshot[];
 }
 
 /** A geopolitical hotspot. */
@@ -272,6 +291,10 @@ export interface RegionETF {
   /** Day percent change as a signed string (e.g. "+1.2%", "−0.4%"). */
   dayPct: string;
   direction: Direction;
+  /** Live yahoo enrichment (added by server in B31-1). */
+  currency?: string;
+  price?:    number;
+  name?:     string;
 }
 
 /** Drawer detail payload returned by `geo.getRegionDetail(label)`. */

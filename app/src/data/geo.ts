@@ -5,6 +5,7 @@
 
 import type {
   AffectedHolding,
+  GeoIndexTrail,
   GlobalRiskIndex,
   MapLayer,
   RegionDetail,
@@ -205,6 +206,22 @@ export async function getRiskMap(): Promise<RiskMapEntry> {
 export async function getGlobalIndex(): Promise<GlobalRiskIndex> {
   const s = await fetchState();
   return s.globalIndex;
+}
+
+/**
+ * Sparkline data for the GlobalRiskIndex. Backend snapshots `/state`
+ * every 6h, so 1D returns up to 4 points, 1W up to ~28, 1M up to ~120.
+ * On any backend error, returns an empty trail so the UI just hides the
+ * sparkline rather than blanking the index value.
+ */
+export async function getIndexTrail(range: '1D' | '1W' | '1M' = '1W'): Promise<GeoIndexTrail> {
+  try {
+    const r = await fetch(`/api/geo/index-trail?range=${range}`);
+    if (r.ok) return (await r.json()) as GeoIndexTrail;
+  } catch {
+    /* fall through */
+  }
+  return { range, snapshots: [] };
 }
 
 /** Returns active geopolitical hotspots ranked by impact. */

@@ -15,8 +15,13 @@
 import { Router, type Request, type Response } from 'express';
 import * as grounded from '../providers/gemini-grounded.js';
 import { localStore } from '../storage/local.js';
-import { fetchQuoteSummary } from '../providers/yahoo.js';
+import { fetchQuotes, fetchQuoteSummary } from '../providers/yahoo.js';
 import { TTLCache } from '../lib/cache.js';
+import {
+  listSnapshots,
+  snapshotIndex,
+  type IndexSnapshot,
+} from '../storage/geoIndex.js';
 
 export const geo = Router();
 
@@ -27,7 +32,11 @@ type RiskLevel = 'low' | 'med' | 'high';
 interface MapPin {
   x: number; y: number; level: RiskLevel; label: string; value?: number; lat?: number; lng?: number;
 }
-type FlowLine = [number, number, number, number];
+// FlowLine: [lng1, lat1, lng2, lat2, levelOpt?] — final number is level
+// encoded as 1 (low) / 2 (med) / 3 (high); omitted means "med" colored.
+// Width / color picked by the renderer from this level. Stays
+// backwards-compatible with the legacy 4-tuple shape.
+type FlowLine = [number, number, number, number] | [number, number, number, number, number];
 interface RiskMapEntry {
   heat: Record<string, RiskLevel>;
   pins: MapPin[];
@@ -47,7 +56,14 @@ interface RiskAlert {
 }
 interface MapLayer { name: string; enabled: boolean; }
 interface RegionEvent { date: string; headline: string; }
-interface RegionETF { symbol: string; dayPct: string; direction: 1 | -1; }
+interface RegionETF {
+  symbol:   string;
+  dayPct:   string;            // formatted, with sign
+  direction: 1 | -1;
+  currency?: string;           // yahoo currency code (USD/KRW/JPY/…)
+  price?:    number;           // live regularMarketPrice
+  name?:     string;           // short/long name
+}
 interface RegionDetail { label: string; events: RegionEvent[]; etfs: RegionETF[]; }
 
 interface GeoState {
@@ -77,7 +93,14 @@ const FALLBACK_STATE: GeoState = {
     { x: 245, y: 235, level: 'low',  label: 'US · ELECTION', value: 2, lat: 38.90, lng: -77.04 },
     { x: 555, y: 295, level: 'med',  label: 'NG · ENERGY',   value: 3, lat: 9.08,  lng: 8.68  },
   ],
-  flows: [],
+  // 5-tuple flows: [fromLng, fromLat, toLng, toLat, level(1|2|3)]
+  flows: [
+    [-95,    38,    121,    23.7,  3], // US → TW (semis supply chain)
+    [127,    37.5,  -95,    38,    2], // KR → US (memory exports)
+    [ 53,    32,    31,     49,    3], // IR → UA (military/proxy)
+    [  8.68,  9.08, 31,     49,    1], // NG → UA (energy substitution)
+    [ 35.22, 31.78, 53,     32,    2], // IL → IR
+  ],
   hotspots: [
     { name: 'TW Strait', impact: 'Semis supply 40% global', level: 'high', tickers: 'TSM, ASML, NVDA, AMD' },
     { name: 'Red Sea',   impact: 'Oil + container shipping', level: 'high', tickers: 'MAERSK, COSCO, XOM' },
@@ -115,6 +138,7 @@ const FALLBACK_REGION: RegionDetail = {
 
 geo.get('/state', async (_req: Request, res: Response) => {
   if (!grounded.isConfigured()) {
+    snapshotIndex(FALLBACK_STATE.globalIndex.value, FALLBACK_STATE.globalIndex.note);
     res.json(FALLBACK_STATE);
     return;
   }
@@ -133,7 +157,10 @@ exact shape, no markdown fences or commentary:
     { "x":0,"y":0,"level":"low"|"med"|"high","label":"CC · TOPIC","value":<1-9>,"lat":<deg>,"lng":<deg> },
     ...                                                     // 5-10 pins
   ],
-  "flows": [],                                               // empty for now
+  "flows": [
+    [<fromLng>, <fromLat>, <toLng>, <toLat>, <level 1|2|3>], // 3-6 lines
+    ...                                                     // economic / supply-chain / military links between hotspot countries; level: 1=watch 2=tension 3=crisis
+  ],
   "hotspots": [
     { "name":"<region>", "impact":"<≤60 char description>", "level":"low|med|high", "tickers":"AAA, BBB, CCC" },
     ...                                                     // 4-6 hotspots
@@ -157,7 +184,27 @@ Use ISO 3166-1 alpha-3 country codes for "heat" keys (UKR, ISR, TWN, etc.).
 Keep tickers comma-separated and uppercase. Output ONLY the JSON object.`,
   });
 
-  res.json(result ?? FALLBACK_STATE);
+  const state = result ?? FALLBACK_STATE;
+  // Append a snapshot of the global risk index so /index-trail can render
+  // a sparkline of where it's been over the last 1D/1W/1M. Throttled to
+  // 6h gaps inside snapshotIndex(), matching the Gemini cache TTL.
+  snapshotIndex(state.globalIndex.value, state.globalIndex.note);
+  res.json(state);
+});
+
+// ─── /index-trail — sparkline data for GlobalRiskIndex ───────────────────────
+
+const TRAIL_WINDOWS_MS: Record<string, number> = {
+  '1D':  24 * 60 * 60 * 1000,
+  '1W':   7 * 24 * 60 * 60 * 1000,
+  '1M':  30 * 24 * 60 * 60 * 1000,
+};
+
+geo.get('/index-trail', (req: Request, res: Response): void => {
+  const range = String(req.query.range ?? '1W').toUpperCase();
+  const windowMs = TRAIL_WINDOWS_MS[range] ?? TRAIL_WINDOWS_MS['1W'];
+  const snapshots: IndexSnapshot[] = listSnapshots(windowMs);
+  res.json({ range, snapshots });
 });
 
 // ─── /affected — Holdings exposed to current geo hotspots ──────────────────
@@ -307,10 +354,56 @@ geo.get('/affected', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * Overwrite the model-supplied dayPct/direction with live yahoo quotes so
+ * the drawer always shows current numbers — Gemini's price hint is best
+ * thought of as a yesterday's snapshot.
+ * Adds currency + name + live price too.
+ */
+async function enrichRegionETFs(detail: RegionDetail): Promise<RegionDetail> {
+  if (!Array.isArray(detail.etfs) || detail.etfs.length === 0) return detail;
+  const symbols = detail.etfs.map((e) => e.symbol).filter(Boolean);
+  if (symbols.length === 0) return detail;
+  let quotes: Awaited<ReturnType<typeof fetchQuotes>> = [];
+  try {
+    quotes = await fetchQuotes(symbols);
+  } catch {
+    // Best-effort — if yahoo errors, leave the model-supplied values.
+    return detail;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const qMap = new Map<string, any>(quotes.map((q: any) => [String(q?.symbol).toUpperCase(), q]));
+  const enriched: RegionETF[] = detail.etfs.map((e) => {
+    const q = qMap.get(e.symbol.toUpperCase());
+    if (!q) return e;
+    const chp = typeof q.regularMarketChangePercent === 'number'
+      ? q.regularMarketChangePercent
+      : null;
+    const px = typeof q.regularMarketPrice === 'number'
+      ? q.regularMarketPrice
+      : undefined;
+    const dayPct = chp != null
+      ? `${chp >= 0 ? '+' : '−'}${Math.abs(chp).toFixed(2)}%`
+      : e.dayPct;
+    const direction: 1 | -1 = chp != null
+      ? (chp >= 0 ? 1 : -1)
+      : (e.direction ?? 1);
+    return {
+      symbol:   e.symbol,
+      dayPct,
+      direction,
+      price:    px,
+      currency: typeof q.currency === 'string' ? q.currency : undefined,
+      name:     (q.shortName ?? q.longName) || undefined,
+    };
+  });
+  return { ...detail, etfs: enriched };
+}
+
 geo.get('/region/:label', async (req: Request, res: Response) => {
   const label = String(req.params.label);
   if (!grounded.isConfigured()) {
-    res.json({ ...FALLBACK_REGION, label });
+    res.json(await enrichRegionETFs({ ...FALLBACK_REGION, label }));
     return;
   }
   const today = new Date().toISOString().slice(0, 10);
@@ -330,12 +423,13 @@ hotspot labeled "${label}" (this is a ticker-style code like "UA · WAR" or
   ],
   "etfs": [
     { "symbol":"<TICKER>", "dayPct":"<+1.2% or −0.4%>", "direction":1|-1 },
-    ...                          // 3-5 related ETFs / instruments
+    ...                          // 3-5 related ETFs / instruments — yahoo-tradable, not OTC
   ]
 }
 
 Output ONLY the JSON object.`,
   });
 
-  res.json(result ?? { ...FALLBACK_REGION, label });
+  const base = result ?? { ...FALLBACK_REGION, label };
+  res.json(await enrichRegionETFs(base));
 });

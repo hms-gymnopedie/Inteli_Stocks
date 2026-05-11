@@ -347,23 +347,39 @@ export async function* streamInsights(
   }
 }
 
+export interface HedgeInput {
+  /** Free-form summary. Optional when `holdings`+`hotspots` are supplied. */
+  exposure?: string;
+  /** Current portfolio rows; weight is the formatted "%" string used by /holdings. */
+  holdings?: { symbol: string; weight?: string; name?: string }[];
+  /** Active geopolitical hotspots from /api/geo/state. */
+  hotspots?: { name: string; level: 'low' | 'med' | 'high'; impact?: string; tickers?: string }[];
+}
+
 /**
- * Returns a hedge proposal for the given geo exposure string + AI usage meta.
- * Falls back to mock on 503 / network error (mock meta has totalTokens=0).
+ * Returns a hedge proposal for the given exposure context.
+ *
+ * Backwards-compatible: accepts a plain string (legacy) OR a structured
+ * `{ holdings, hotspots, exposure? }` payload (B31-4). Structured form
+ * lets the server build a richer prompt with concrete tickers + weights
+ * so the proposal can name specific trades instead of generic advice.
  */
-export async function proposeHedge(exposure: string): Promise<AIResponse<HedgeProposal>> {
+export async function proposeHedge(
+  input: string | HedgeInput,
+): Promise<AIResponse<HedgeProposal>> {
+  const payload: Record<string, unknown> = typeof input === 'string'
+    ? { exposure: input }
+    : { ...input };
   try {
     const res = await fetch(`${AI_BASE}/hedge`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    aiBody({ exposure }),
+      body:    aiBody(payload),
     });
     if (!res.ok) {
       return { data: MOCK_HEDGE_PROPOSAL, meta: MOCK_META };
     }
     const json = (await res.json()) as AIResponse<HedgeProposal>;
-    // Defensive: server should return wrapped { data, meta }; if it accidentally
-    // returns the bare HedgeProposal we still want to surface something usable.
     if (!json || typeof json !== 'object' || !('data' in json)) {
       return { data: json as unknown as HedgeProposal, meta: MOCK_META };
     }
