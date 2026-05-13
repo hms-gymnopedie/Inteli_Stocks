@@ -20,6 +20,7 @@ import { mirrorToSheets } from '../storage/google-sheets.js';
 import * as slack from '../providers/slack.js';
 import { formatISOInTZ } from '../lib/time.js';
 import { evalPositions } from '../lib/positionEval.js';
+import { recomputeSummary } from '../routes/portfolio.js';
 
 let _started = false;
 
@@ -58,21 +59,31 @@ export function startCronJobs(): void {
 async function runDailySync(): Promise<void> {
   const startedAt = Date.now();
 
-  // 1. Push current portfolio to Google Sheets (single-flight; the mirror
-  // returns {ok:false, reason:'no_spreadsheet'} when not configured).
+  // 1. Refresh portfolio.summary from live holdings + equity curves so both
+  //    the Sheets mirror and the Slack heartbeat reflect today's numbers
+  //    rather than the seed values that ship with a fresh install. (B35)
+  const store = await localStore.read(null);
+  try {
+    const fresh = await recomputeSummary(store);
+    store.summary = fresh;
+    await localStore.write(null, store);
+  } catch (err) {
+    console.warn('[cron] summary recompute failed — using stored values:', err);
+  }
+
+  // 2. Push the (now-fresh) portfolio to Google Sheets. mirrorToSheets returns
+  //    {ok:false, reason:'no_spreadsheet'} when Google isn't configured.
   let mirrorResult = '';
   try {
-    const store = await localStore.read(null);
     const r = await mirrorToSheets(store);
     mirrorResult = r.ok ? `Sheets ✅ ${formatISOInTZ(new Date(r.syncedAt))}` : `Sheets — ${r.reason}`;
   } catch (err) {
     mirrorResult = `Sheets ❌ ${err instanceof Error ? err.message : String(err)}`;
   }
 
-  // 2. Slack heartbeat with summary (only if configured).
+  // 3. Slack heartbeat with live summary (only if configured).
   if (slack.isConfigured()) {
     try {
-      const store = await localStore.read(null);
       const s = store.summary;
       const lines = [
         '*InteliStock daily heartbeat*',

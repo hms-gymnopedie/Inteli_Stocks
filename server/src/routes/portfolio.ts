@@ -113,7 +113,7 @@ function rangeToInterval(range: EquityRange): '1d' | '5m' | '15m' | '30m' {
  *   exposure / risk — left as configured in the store (no real source yet;
  *                     these stay stable across recomputes)
  */
-async function recomputeSummary(
+export async function recomputeSummary(
   store: PortfolioStore,
 ): Promise<typeof store.summary> {
   const seed = store.summary;

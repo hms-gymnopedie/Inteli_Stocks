@@ -320,6 +320,22 @@ Mock 데이터 출처는 현재 페이지에 하드코딩된 값 (Overview/Portf
 
 ---
 
+### 배치 B34 — Docker 셀프호스팅
+
+| ID | Task | 파일 | Agent | Status | Notes |
+|---|---|---|---|---|---|
+| B34-1 | Docker 셀프호스팅 (`docker-compose up` 한 커맨드) | `Dockerfile.server`, `Dockerfile.app`, `docker-compose.yml`, `.env.example`, `.dockerignore`, `README.md` | backend-api-data-engineer | 🟡 | |
+
+---
+
+### 배치 B35 — Daily heartbeat 라이브 요약
+
+| ID | Task | 파일 | Agent | Status | Notes |
+|---|---|---|---|---|---|
+| B35-1 | 매일 9 AM Slack heartbeat 가 `store.summary` 시드 대신 holdings·equity-curve 에서 재계산한 live NAV/Day/YTD/1Y/Sharpe 를 보내도록. recomputeSummary 를 cron 에서 재사용 + 결과를 store 에 persist 해 Sheets mirror 도 같이 갱신 | `server/src/routes/portfolio.ts`, `server/src/jobs/cron.ts` | self | ✅ | recomputeSummary 만 export, cron 에서 read→recompute→write→mirror→slack 순서로 재구성 |
+
+---
+
 ## 7. Locked decisions
 
 | # | Decision | Locked value | Date |
